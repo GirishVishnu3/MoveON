@@ -17,7 +17,7 @@ import {
 import { socket } from 'shared/src/utils/websocket';
 import Link from 'next/link';
 
-/* ─── Animated search ring ──────────────────────────────────────────────── */
+/* --- Animated search ring ------------------------------------------------ */
 function PulseRings() {
   return (
     <div className="relative flex items-center justify-center w-40 h-40">
@@ -42,7 +42,7 @@ function PulseRings() {
   );
 }
 
-/* ─── Driver assigned card ────────────────────────────────────────────────── */
+/* --- Driver assigned card -------------------------------------------------- */
 function DriverCard({ driver }: { driver: { driver_id: string; driver_name: string; vehicle_model?: string; rating?: number; eta_minutes?: number } }) {
   return (
     <div className="bg-white rounded-3xl border border-green-100 shadow-xl shadow-green-100/60 p-6 flex flex-col gap-4 animate-[slideUp_0.5s_ease]">
@@ -79,7 +79,7 @@ function DriverCard({ driver }: { driver: { driver_id: string; driver_name: stri
   );
 }
 
-/* ─── Main page ──────────────────────────────────────────────────────────── */
+/* --- Main page ------------------------------------------------------------ */
 export default function BookingStatusPage() {
   const router = useRouter();
   const params = useParams();

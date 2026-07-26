@@ -8,7 +8,7 @@ import { apiClient } from 'shared/src/api/axios';
 import { LocationAccessModal } from 'shared/src/components/location/LocationAccessModal';
 import { motion, AnimatePresence } from 'framer-motion';
 
-/* ─── Icon Components ───────────────────────────────────────────── */
+/* --- Icon Components --------------------------------------------- */
 const Icon = {
   Wallet: () => (
     <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.8}>
@@ -53,7 +53,7 @@ const Icon = {
   ),
 };
 
-/* ─── Metric Card ─────────────────────────────────────────────────── */
+/* --- Metric Card --------------------------------------------------- */
 function MetricCard({ label, value, icon, accent, delay }: {
   label: string; value: string | number; icon: React.ReactNode;
   accent: string; delay: number;
@@ -82,7 +82,7 @@ function MetricCard({ label, value, icon, accent, delay }: {
   );
 }
 
-/* ─── Ride Card ───────────────────────────────────────────────────── */
+/* --- Ride Card ----------------------------------------------------- */
 function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; index: number }) {
   const [accepting, setAccepting] = useState(false);
   const [countdown, setCountdown] = useState(30);
@@ -185,7 +185,7 @@ function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; 
   );
 }
 
-/* ─── Active Trip Card ────────────────────────────────────────────── */
+/* --- Active Trip Card ---------------------------------------------- */
 function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => void }) {
   return (
     <motion.div
@@ -260,7 +260,7 @@ function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => voi
   );
 }
 
-/* ─── Quick Link Button ───────────────────────────────────────────── */
+/* --- Quick Link Button --------------------------------------------- */
 function QuickLink({ icon, label, onClick, danger = false }: {
   icon: string; label: string; onClick: () => void; danger?: boolean;
 }) {
@@ -281,7 +281,7 @@ function QuickLink({ icon, label, onClick, danger = false }: {
   );
 }
 
-/* ─── Main Dashboard ─────────────────────────────────────────────── */
+/* --- Main Dashboard ----------------------------------------------- */
 export default function DriverDashboardPage() {
   const router = useRouter();
   const dispatch = useDispatch();
@@ -413,7 +413,7 @@ export default function DriverDashboardPage() {
       {/* Live Geolocation Access Prompt */}
       <LocationAccessModal />
 
-      {/* ── Sticky Header ── */}
+      {/* -- Sticky Header -- */}
       <motion.header
         initial={{ opacity: 0, y: -20 }}
         animate={{ opacity: 1, y: 0 }}
@@ -494,7 +494,7 @@ export default function DriverDashboardPage() {
         </div>
       </motion.header>
 
-      {/* ── Main Content ── */}
+      {/* -- Main Content -- */}
       <main className="flex-1 max-w-4xl w-full mx-auto p-4 sm:p-6 space-y-5">
 
         {/* Error Banner */}

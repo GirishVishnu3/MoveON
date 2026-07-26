@@ -13,7 +13,7 @@ import {
 import { socket } from 'shared/src/utils/websocket';
 import { useRouter } from 'next/navigation';
 
-/* ─── Countdown ring ─────────────────────────────────────────────────────── */
+/* --- Countdown ring ------------------------------------------------------- */
 function CountdownRing({ value, max }: { value: number; max: number }) {
   const r = 42;
   const circ = 2 * Math.PI * r;
@@ -38,7 +38,7 @@ function CountdownRing({ value, max }: { value: number; max: number }) {
   );
 }
 
-/* ─── Main driver incoming ride page ─────────────────────────────────────── */
+/* --- Main driver incoming ride page --------------------------------------- */
 export default function DriverIncomingPage() {
   const router = useRouter();
   const rdxDispatch = useDispatch<AppDispatch>();
