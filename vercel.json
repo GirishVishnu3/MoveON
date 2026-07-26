@@ -6,10 +6,10 @@
   "rewrites": [
     {
       "source": "/api/:path*",
-      "destination": "https://moveon-backend.up.railway.app/:path*"
+      "destination": "https://moveon-backend-production-c80c.up.railway.app/:path*"
     }
   ],
   "env": {
-    "NEXT_PUBLIC_API_URL": "https://moveon-backend.up.railway.app"
+    "NEXT_PUBLIC_API_URL": "https://moveon-backend-production-c80c.up.railway.app"
   }
 }
