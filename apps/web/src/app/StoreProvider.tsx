@@ -4,6 +4,7 @@ import { store } from "shared/src";
 import GlobalNotificationListener from "./GlobalNotificationListener";
 import { useEffect } from "react";
 import { hydrateAuth } from "shared/src/store/authSlice";
+import LocationPrompt from "shared/src/components/location/LocationPrompt";
 
 function AuthHydrator({ children }: { children: React.ReactNode }) {
   useEffect(() => {
@@ -21,6 +22,7 @@ export default function StoreProvider({
     <Provider store={store}>
       <AuthHydrator>
         <GlobalNotificationListener />
+        <LocationPrompt />
         {children}
       </AuthHydrator>
     </Provider>

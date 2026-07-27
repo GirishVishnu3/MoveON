@@ -1,15 +1,81 @@
 "use client";
-import React, { useEffect, useRef } from 'react';
-import L from 'leaflet';
-import 'leaflet/dist/leaflet.css';
+import React, { useEffect, useState, useMemo, useRef } from 'react';
+import { Map, AdvancedMarker, Pin, useMap, useMapsLibrary } from '@vis.gl/react-google-maps';
 
 interface RouteMapProps {
   pickup: { lat: number; lon: number; address?: string } | null;
   destination: { lat: number; lon: number; address?: string } | null;
-  // Accept any GeoJSON geometry (LineString or MultiLineString) from OSRM
   routeGeometry?: GeoJSON.Geometry | null;
   onPickupDragEnd?: (lat: number, lon: number) => void;
   onDestinationDragEnd?: (lat: number, lon: number) => void;
+}
+
+function Polyline({ path }: { path: google.maps.LatLngLiteral[] }) {
+  const map = useMap();
+  const polylineRef = useRef<google.maps.Polyline | null>(null);
+
+  useEffect(() => {
+    if (!map || !window.google) return;
+    if (!polylineRef.current) {
+      polylineRef.current = new window.google.maps.Polyline({
+        strokeColor: '#2563eb',
+        strokeWeight: 5,
+        strokeOpacity: 0.8,
+      });
+      polylineRef.current.setMap(map);
+    }
+    return () => {
+      if (polylineRef.current) {
+        polylineRef.current.setMap(null);
+        polylineRef.current = null;
+      }
+    };
+  }, [map]);
+
+  useEffect(() => {
+    if (!polylineRef.current) return;
+    polylineRef.current.setPath(path);
+  }, [path]);
+
+  return null;
+}
+
+function MapBoundsAdjuster({
+  pickup,
+  destination,
+  path
+}: {
+  pickup: { lat: number; lon: number } | null;
+  destination: { lat: number; lon: number } | null;
+  path: google.maps.LatLngLiteral[];
+}) {
+  const map = useMap();
+  const maps = useMapsLibrary('core');
+
+  useEffect(() => {
+    if (!map || !maps || !window.google) return;
+    const bounds = new window.google.maps.LatLngBounds();
+    let hasPoints = false;
+
+    if (pickup) {
+      bounds.extend({ lat: pickup.lat, lng: pickup.lon });
+      hasPoints = true;
+    }
+    if (destination) {
+      bounds.extend({ lat: destination.lat, lng: destination.lon });
+      hasPoints = true;
+    }
+    path.forEach(p => {
+      bounds.extend(p);
+      hasPoints = true;
+    });
+
+    if (hasPoints) {
+      map.fitBounds(bounds, { top: 50, bottom: 50, left: 50, right: 50 });
+    }
+  }, [map, maps, pickup, destination, path]);
+
+  return null;
 }
 
 export default function RouteMap({
@@ -19,141 +85,60 @@ export default function RouteMap({
   onPickupDragEnd,
   onDestinationDragEnd,
 }: RouteMapProps) {
-  const mapContainerRef = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<L.Map | null>(null);
-  const pickupMarkerRef = useRef<L.Marker | null>(null);
-  const destinationMarkerRef = useRef<L.Marker | null>(null);
-  const polylineRef = useRef<L.Polyline | null>(null);
+  const defaultCenter = { lat: 12.9716, lng: 77.5946 }; // Bangalore
 
-  // Initialize Map
-  useEffect(() => {
-    if (!mapContainerRef.current) return;
-
-    // Fix default Leaflet icon paths
-    // @ts-ignore
-    delete L.Icon.Default.prototype._getIconUrl;
-    L.Icon.Default.mergeOptions({
-      iconRetinaUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon-2x.png',
-      iconUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-icon.png',
-      shadowUrl: 'https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.7.1/images/marker-shadow.png',
-    });
-
-    const defaultLat = 12.9716; // default Bangalore
-    const defaultLon = 77.5946;
-
-    const map = L.map(mapContainerRef.current).setView([defaultLat, defaultLon], 13);
-
-    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-      attribution: '© OpenStreetMap contributors',
-    }).addTo(map);
-
-    mapRef.current = map;
-
-    return () => {
-      map.remove();
-      mapRef.current = null;
-    };
-  }, []);
-
-  // Update Markers and Fit Bounds
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map) return;
-
-    // Clear existing layers if necessary
-    if (pickupMarkerRef.current) {
-      map.removeLayer(pickupMarkerRef.current);
-      pickupMarkerRef.current = null;
-    }
-    if (destinationMarkerRef.current) {
-      map.removeLayer(destinationMarkerRef.current);
-      destinationMarkerRef.current = null;
-    }
-    if (polylineRef.current) {
-      map.removeLayer(polylineRef.current);
-      polylineRef.current = null;
-    }
-
-    const bounds: L.LatLngTuple[] = [];
-
-    // Create Pickup Marker
-    if (pickup) {
-      const pickupIcon = L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div class="w-8 h-8 rounded-full bg-blue-600 border-4 border-white flex items-center justify-center text-white font-bold shadow-lg">P</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      });
-
-      const marker = L.marker([pickup.lat, pickup.lon], {
-        draggable: !!onPickupDragEnd,
-        icon: pickupIcon,
-      }).addTo(map);
-
-      if (pickup.address) {
-        marker.bindPopup(`<b>Pickup</b><br>${pickup.address}`);
-      }
-
-      if (onPickupDragEnd) {
-        marker.on('dragend', (e: L.LeafletEvent) => {
-          const latLng = e.target.getLatLng();
-          onPickupDragEnd(latLng.lat, latLng.lng);
-        });
-      }
-
-      pickupMarkerRef.current = marker;
-      bounds.push([pickup.lat, pickup.lon] as L.LatLngTuple);
-    }
-
-    // Create Destination Marker
-    if (destination) {
-      const destIcon = L.divIcon({
-        className: 'custom-div-icon',
-        html: `<div class="w-8 h-8 rounded-full bg-red-600 border-4 border-white flex items-center justify-center text-white font-bold shadow-lg">D</div>`,
-        iconSize: [32, 32],
-        iconAnchor: [16, 16],
-      });
-
-      const marker = L.marker([destination.lat, destination.lon], {
-        draggable: !!onDestinationDragEnd,
-        icon: destIcon,
-      }).addTo(map);
-
-      if (destination.address) {
-        marker.bindPopup(`<b>Destination</b><br>${destination.address}`);
-      }
-
-      if (onDestinationDragEnd) {
-        marker.on('dragend', (e: L.LeafletEvent) => {
-          const latLng = e.target.getLatLng();
-          onDestinationDragEnd(latLng.lat, latLng.lng);
-        });
-      }
-
-      destinationMarkerRef.current = marker;
-      bounds.push([destination.lat, destination.lon] as L.LatLngTuple);
-    }
-
-    // Draw route geometry if it's a LineString
+  const path = useMemo(() => {
     if (routeGeometry && 'type' in routeGeometry && routeGeometry.type === 'LineString') {
       const line = routeGeometry as GeoJSON.LineString;
-      const latLngs = line.coordinates.map(coord => [coord[1], coord[0]] as L.LatLngTuple);
-      const polyline = L.polyline(latLngs, {
-        color: '#2563eb',
-        weight: 5,
-        opacity: 0.8,
-      }).addTo(map);
-      polylineRef.current = polyline;
-      map.fitBounds(polyline.getBounds(), { padding: [50, 50] });
-    } else if (bounds.length > 0) {
-      map.fitBounds(L.latLngBounds(bounds), { padding: [50, 50], maxZoom: 15 });
+      return line.coordinates.map(coord => ({
+        lat: coord[1],
+        lng: coord[0]
+      }));
     }
-  }, [pickup, destination, routeGeometry, onPickupDragEnd, onDestinationDragEnd]);
+    return [];
+  }, [routeGeometry]);
 
   return (
-    <div
-      ref={mapContainerRef}
-      className="w-full h-full min-h-[300px] md:min-h-[400px] rounded-2xl shadow-inner border border-gray-100 overflow-hidden"
-    />
+    <div className="w-full h-full min-h-[300px] md:min-h-[400px] rounded-2xl shadow-inner border border-gray-100 overflow-hidden relative bg-gray-50">
+      <Map
+        mapId="DEMO_MAP_ID"
+        defaultCenter={defaultCenter}
+        defaultZoom={13}
+        disableDefaultUI={true}
+        gestureHandling="greedy"
+      >
+        {pickup && (
+          <AdvancedMarker
+            position={{ lat: pickup.lat, lng: pickup.lon }}
+            draggable={!!onPickupDragEnd}
+            onDragEnd={(e) => {
+              if (e.latLng && onPickupDragEnd) {
+                onPickupDragEnd(e.latLng.lat(), e.latLng.lng());
+              }
+            }}
+          >
+            <div className="w-8 h-8 rounded-full bg-blue-600 border-4 border-white flex items-center justify-center text-white font-bold shadow-lg">P</div>
+          </AdvancedMarker>
+        )}
+
+        {destination && (
+          <AdvancedMarker
+            position={{ lat: destination.lat, lng: destination.lon }}
+            draggable={!!onDestinationDragEnd}
+            onDragEnd={(e) => {
+              if (e.latLng && onDestinationDragEnd) {
+                onDestinationDragEnd(e.latLng.lat(), e.latLng.lng());
+              }
+            }}
+          >
+            <div className="w-8 h-8 rounded-full bg-red-600 border-4 border-white flex items-center justify-center text-white font-bold shadow-lg">D</div>
+          </AdvancedMarker>
+        )}
+
+        {path.length > 0 && <Polyline path={path} />}
+        
+        <MapBoundsAdjuster pickup={pickup} destination={destination} path={path} />
+      </Map>
+    </div>
   );
 }

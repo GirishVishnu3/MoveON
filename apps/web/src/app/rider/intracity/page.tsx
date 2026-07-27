@@ -2,7 +2,7 @@
 import React, { useEffect, useState, useCallback, useRef } from 'react';
 import { useDispatch, useSelector } from 'react-redux';
 import { useRouter } from 'next/navigation';
-import Link from 'next/link';
+import TopNavBar from 'shared/src/components/navigation/TopNavBar';
 import { RootState } from 'shared/src/store/index';
 import { setPickup, setDestination, setRoute, clearRoute } from 'shared/src/store/locationSlice';
 import {
@@ -337,23 +337,15 @@ export default function IntracityPage() {
   return (
     <div className="min-h-screen bg-gray-50">
       {/* Header */}
-      <div className="bg-white border-b border-gray-100 px-4 py-4 flex items-center justify-between">
-        <div className="flex items-center gap-3">
-          <Link 
-            href="/rider/home" 
-            className="flex items-center text-xs font-bold text-gray-700 hover:text-blue-600 transition-colors gap-1.5 py-1.5 px-3 rounded-xl bg-gray-100 hover:bg-gray-200"
-          >
-            <span>←</span> Back to Home
-          </Link>
-          <h1 className="text-lg font-bold text-gray-900">IntraCity Ride</h1>
-        </div>
-
-        {/* Top Active City Badge */}
-        <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full text-xs font-semibold text-blue-700">
-          <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
-          <span>City: {selectedCity}</span>
-        </div>
-      </div>
+      <TopNavBar
+        title="IntraCity Ride"
+        rightAction={
+          <div className="flex items-center gap-2 bg-blue-50 border border-blue-100 px-3 py-1.5 rounded-full text-xs font-semibold text-blue-700">
+            <span className="w-2 h-2 rounded-full bg-blue-500 animate-pulse" />
+            <span>City: {selectedCity}</span>
+          </div>
+        }
+      />
 
       <div className="max-w-6xl mx-auto px-4 py-4 grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Left column: Controls and details */}

@@ -64,11 +64,6 @@ export default function RideSummary({
         </div>
       )}
 
-      {/* Payment */}
-      <div className="flex items-center gap-2 text-sm text-gray-500 border-t border-gray-100 pt-2">
-        <span>{paymentMethod === 'CASH' ? '💵' : '💳'}</span>
-        <span>{paymentMethod === 'CASH' ? 'Pay by Cash' : paymentMethod}</span>
-      </div>
     </div>
   );
 }

@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import { useSelector } from 'react-redux';
 import { RootState } from 'shared/src/store/index';
 import { apiClient } from 'shared/src/api/axios';
-import Link from 'next/link';
+import TopNavBar from 'shared/src/components/navigation/TopNavBar';
 import { useRouter } from 'next/navigation';
 
 interface TripHistoryItem {
@@ -43,11 +43,7 @@ export default function RiderHistoryPage() {
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
-      <div className="bg-white/5 p-4 border-b border-white/10 flex justify-between items-center">
-        <Link href="/rider/home" className="text-white/80 text-sm font-bold">&larr; Back</Link>
-        <h1 className="text-lg font-bold">Trip History</h1>
-        <div className="w-12" />
-      </div>
+      <TopNavBar title="Trip History" />
 
       <div className="p-4 flex flex-col gap-3">
         {loading && <p className="text-gray-500 text-center py-12">Loading trips...</p>}

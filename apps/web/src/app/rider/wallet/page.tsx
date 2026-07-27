@@ -5,7 +5,7 @@ import { useSelector, useDispatch } from 'react-redux';
 import { RootState, AppDispatch } from 'shared/src/store/index';
 import { apiClient } from 'shared/src/api/axios';
 import { setWalletData, setLoading, updateBalance } from 'shared/src/store/walletSlice';
-import Link from 'next/link';
+import TopNavBar from 'shared/src/components/navigation/TopNavBar';
 
 export default function RiderWalletPage() {
   const dispatch = useDispatch<AppDispatch>();
@@ -52,12 +52,8 @@ export default function RiderWalletPage() {
   return (
     <div className="min-h-screen bg-slate-900 text-white">
       {/* Header */}
+      <TopNavBar title="Wallet" />
       <div className="bg-gradient-to-br from-blue-600 to-indigo-700 p-6 pb-16">
-        <div className="flex justify-between items-center mb-6">
-          <Link href="/rider/home" className="text-white/80 text-sm font-bold">&larr; Back</Link>
-          <h1 className="text-lg font-bold">Wallet</h1>
-          <div className="w-12" />
-        </div>
         <div className="text-center">
           <p className="text-blue-200 text-sm font-medium uppercase tracking-wider">Available Balance</p>
           <p className="text-5xl font-black mt-2">

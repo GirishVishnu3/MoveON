@@ -4,7 +4,7 @@ import { setTokens, logout } from '../store/authSlice';
 
 // Create a base instance
 export const apiClient = axios.create({
-  baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000',
+  baseURL: process.env.NEXT_PUBLIC_API_URL || 'https://moveon-backend-production-c80c.up.railway.app',
   headers: {
     'Content-Type': 'application/json',
   },
