@@ -2,6 +2,9 @@
 node_modules/
 .pnp
 .pnp.js
+# Nested lockfiles (root package-lock.json is the source of truth for workspaces)
+apps/*/package-lock.json
+shared/package-lock.json
 
 # Build outputs
 .next/
