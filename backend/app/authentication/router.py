@@ -19,7 +19,10 @@ from app.services.sms_service import get_sms_provider, SmsProvider
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
 
-IS_DEV = os.getenv("SMS_PROVIDER", "DEV") == "DEV"
+def is_dev_mode() -> bool:
+    return os.getenv("SMS_PROVIDER", "DEV").upper() == "DEV"
+
+logger.info(f"[AUTH] SMS_PROVIDER={os.getenv('SMS_PROVIDER', 'DEV')} | DEV_MODE={is_dev_mode()}")
 
 def _mask_phone(phone: str) -> str:
     if len(phone) <= 4:
@@ -30,16 +33,27 @@ def generate_otp() -> str:
     """Cryptographically secure 6-digit OTP."""
     return str(secrets.randbelow(900000) + 100000)
 
+def _make_aware(dt) -> datetime:
+    """Ensure a datetime is timezone-aware (UTC). SQLite returns naive datetimes."""
+    if dt is None:
+        return dt
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=timezone.utc)
+    return dt
+
 @router.post("/request-otp", status_code=status.HTTP_200_OK)
 async def request_otp(data: OtpRequestSchema, db: AsyncSession = Depends(get_db)):
     masked_phone = _mask_phone(data.phone_number)
     logger.info(f"OTP request received for {masked_phone} (role={data.role})")
 
     # Rate limit: max 5 OTP requests per phone per 5 minutes
+    # Use naive UTC time for SQLite compatibility
+    now_utc = datetime.now(timezone.utc)
+    five_min_ago = now_utc - timedelta(minutes=5)
     result = await db.execute(
         select(OtpRequest)
         .where(OtpRequest.phone_number == data.phone_number)
-        .where(OtpRequest.created_at >= datetime.now(timezone.utc) - timedelta(minutes=5))
+        .where(OtpRequest.created_at >= five_min_ago.replace(tzinfo=None))
     )
     requests_in_last_5m = result.scalars().all()
     if len(requests_in_last_5m) >= 5:
@@ -77,9 +91,12 @@ async def request_otp(data: OtpRequestSchema, db: AsyncSession = Depends(get_db)
 
     # In DEV mode, include the OTP in the response so the frontend can display it
     response: dict = {"message": "OTP sent successfully"}
-    if IS_DEV:
+    if is_dev_mode():
         response["dev_otp"] = otp_code
-        response["dev_note"] = "DEV MODE: OTP is included in this response only for local testing. Remove in production."
+        response["dev_note"] = "DEV MODE: OTP is included in this response only for local testing. Not returned in production."
+        logger.info(f"[DEV] OTP for {masked_phone}: {otp_code}")
+    else:
+        logger.info(f"[PROD] Real SMS dispatched to {masked_phone} via {sms_provider.__class__.__name__}")
 
     return response
 
@@ -90,7 +107,7 @@ async def dev_get_latest_otp(phone_number: str, db: AsyncSession = Depends(get_d
     DEV ONLY endpoint: Returns the latest unverified OTP for a phone number.
     This endpoint is disabled in production (when SMS_PROVIDER != DEV).
     """
-    if not IS_DEV:
+    if not is_dev_mode():
         raise HTTPException(status_code=403, detail="This endpoint is only available in development mode.")
 
     result = await db.execute(
@@ -131,7 +148,7 @@ async def verify_otp(request: Request, data: OtpVerifySchema, db: AsyncSession =
         logger.warning(f"Verification failed: no pending OTP for {masked_phone}")
         raise HTTPException(status_code=400, detail="No pending OTP request found. Please request a new OTP.")
 
-    if otp_request.expires_at < datetime.now(timezone.utc):
+    if _make_aware(otp_request.expires_at) < datetime.now(timezone.utc):
         logger.warning(f"Verification failed: OTP expired for {masked_phone}")
         raise HTTPException(status_code=400, detail="OTP has expired. Please request a new one.")
 
@@ -210,7 +227,7 @@ async def refresh_token(request: Request, data: RefreshTokenSchema, db: AsyncSes
     )
     session = result.scalars().first()
 
-    if not session or session.expires_at < datetime.now(timezone.utc):
+    if not session or _make_aware(session.expires_at) < datetime.now(timezone.utc):
         raise HTTPException(status_code=401, detail="Invalid or expired refresh token")
 
     user_result = await db.execute(select(User).where(User.id == session.user_id))

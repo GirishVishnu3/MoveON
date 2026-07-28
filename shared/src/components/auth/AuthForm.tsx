@@ -37,7 +37,8 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       phone_number: phone,
       role: 'GUEST',
     });
-    if (IS_DEV && res.data?.dev_otp) {
+    // Show dev OTP banner if the backend returns it (DEV mode)
+    if (res.data?.dev_otp) {
       setDevOtp(res.data.dev_otp);
     }
     return res;
@@ -198,8 +199,8 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
             )}
           </AnimatePresence>
 
-          {/* DEV MODE OTP Display */}
-          {IS_DEV && devOtp && step === 2 && (
+          {/* DEV MODE OTP Display - shown when backend returns dev_otp */}
+          {devOtp && step === 2 && (
             <motion.div
               initial={{ opacity: 0, scale: 0.95 }}
               animate={{ opacity: 1, scale: 1 }}

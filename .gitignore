@@ -87,3 +87,5 @@ backend/app/__pycache__/
 backend/**/__pycache__/
 backend/alembic/versions/__pycache__/
 .env*
+!*.env.example
+
