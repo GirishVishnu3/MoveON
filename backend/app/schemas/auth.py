@@ -9,6 +9,7 @@ class EmailOtpVerifySchema(BaseModel):
     email: str = Field(..., description="User's email address")
     otp: str = Field(..., description="6-digit OTP code")
     role: str = Field(..., description="Role of the user (RIDER, DRIVER, ADMIN)")
+    full_name: Optional[str] = Field(None, description="Full name for account creation")
     device_info: Optional[str] = None
     
 class TokenSchema(BaseModel):

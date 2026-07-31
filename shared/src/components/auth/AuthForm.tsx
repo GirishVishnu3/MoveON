@@ -13,8 +13,10 @@ interface AuthFormProps {
 const RESEND_COOLDOWN_SECONDS = 30;
 
 export function AuthForm({ onSuccess }: AuthFormProps) {
+  const [isSignUp, setIsSignUp] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
   const [email, setEmail] = useState('');
+  const [fullName, setFullName] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -34,6 +36,10 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     e.preventDefault();
     if (!email.includes('@')) {
       setError('Please enter a valid email address.');
+      return;
+    }
+    if (isSignUp && fullName.trim().length < 2) {
+      setError('Please enter your full name.');
       return;
     }
     setError('');
@@ -80,12 +86,18 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     setError('');
     setLoading(true);
     try {
-      const res = await apiClient.post('/auth/verify-email-otp', {
+      const payload: any = {
         email: email,
         otp: otp,
         role: 'RIDER',
         device_info: typeof window !== 'undefined' ? navigator.userAgent : 'Web Browser',
-      });
+      };
+      
+      if (isSignUp) {
+        payload.full_name = fullName.trim();
+      }
+
+      const res = await apiClient.post('/auth/verify-email-otp', payload);
       
       dispatch(setTokens({
         accessToken: res.data.access_token,
@@ -130,7 +142,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       
       {/* Step Progress */}
       <div className="flex items-center justify-center gap-2 mb-7">
-        {['Email', 'Verify'].map((label, i) => {
+        {['Account', 'Verify'].map((label, i) => {
           const s = i + 1;
           const isActive = step === s;
           const isDone = step > s;
@@ -167,7 +179,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
           exit="exit"
         >
           <h2 className="text-2xl font-black text-white mb-1">
-            {step === 1 ? 'Enter your email address' : 'Verify your email'}
+            {step === 1 ? (isSignUp ? 'Create an account' : 'Welcome back') : 'Verify your email'}
           </h2>
           <p className="text-gray-500 text-sm mb-6">
             {step === 1
@@ -193,6 +205,16 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
           {/* Step 1 — Email input */}
           {step === 1 && (
             <form onSubmit={handleRequestOtp} className="flex flex-col gap-5">
+              {isSignUp && (
+                <input
+                  type="text"
+                  placeholder="Full Name"
+                  value={fullName}
+                  onChange={(e) => setFullName(e.target.value)}
+                  className="w-full bg-gray-900/50 text-white placeholder-gray-500 border border-gray-700/50 rounded-xl px-4 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                  required
+                />
+              )}
               <input
                 type="email"
                 placeholder="you@example.com"
@@ -205,11 +227,21 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                 whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(59,130,246,0.4)' }}
                 whileTap={{ scale: 0.97 }}
                 type="submit"
-                disabled={loading || !email}
+                disabled={loading || !email || (isSignUp && fullName.length < 2)}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-950/40"
               >
                 {loading ? <Spinner /> : 'Send OTP →'}
               </motion.button>
+              
+              <div className="text-center mt-2">
+                <button
+                  type="button"
+                  onClick={() => setIsSignUp(!isSignUp)}
+                  className="text-sm text-gray-400 hover:text-white transition-colors"
+                >
+                  {isSignUp ? 'Already have an account? Log in' : "Don't have an account? Sign up"}
+                </button>
+              </div>
             </form>
           )}
 

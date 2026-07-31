@@ -98,7 +98,7 @@ async def verify_email_otp(request: Request, data: EmailOtpVerifySchema, db: Asy
     is_new_user = False
     if not user:
         is_new_user = True
-        user = User(email=email, role=data.role)
+        user = User(email=email, role=data.role, full_name=data.full_name)
         db.add(user)
         await db.flush()
         logger.info(f"New user created for {email} (role={data.role})")
