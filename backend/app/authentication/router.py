@@ -11,15 +11,16 @@ logger = logging.getLogger(__name__)
 from app.database import get_db
 from app.models.user import User, UserStatusEnum
 from app.models.auth import AuthSession, LoginHistory
-from app.schemas.auth import FirebaseLoginSchema, TokenSchema, RefreshTokenSchema
+from app.schemas.auth import EmailOtpRequestSchema, EmailOtpVerifySchema, TokenSchema, RefreshTokenSchema
 from app.authentication.jwt import create_access_token, create_refresh_token, get_current_user
+from app.services.email_service import send_otp_email
+from passlib.context import CryptContext
+from app.models.otp import EmailOTP
+import random
+
+pwd_context = CryptContext(schemes=["bcrypt"], deprecated="auto")
 
 router = APIRouter(prefix="/auth", tags=["Authentication"])
-
-def _mask_phone(phone: str) -> str:
-    if len(phone) <= 4:
-        return "***"
-    return phone[0] + "*" * (len(phone) - 5) + phone[-4:]
 
 def _make_aware(dt) -> datetime:
     """SQLite returns naive datetimes — attach UTC timezone so comparisons don't crash."""
@@ -30,35 +31,66 @@ def _make_aware(dt) -> datetime:
     return dt
 
 # ---------------------------------------------------------------------------
-# POST /auth/login-firebase
+# POST /auth/request-email-otp
 # ---------------------------------------------------------------------------
-@router.post("/login-firebase", response_model=TokenSchema)
-async def login_firebase(request: Request, data: FirebaseLoginSchema, db: AsyncSession = Depends(get_db)):
+@router.post("/request-email-otp")
+async def request_email_otp(data: EmailOtpRequestSchema, db: AsyncSession = Depends(get_db)):
     """
-    Authenticate a user using a Firebase ID token.
-    This replaces the old request-otp/verify-otp flow. Firebase handles the OTP on the frontend.
+    Generate a 6-digit OTP and send it via email.
     """
-    try:
-        # Verify the Firebase ID token
-        decoded_token = firebase_auth.verify_id_token(data.id_token)
-        phone_number = decoded_token.get('phone_number')
+    email = data.email.lower().strip()
+    
+    # Generate 6-digit OTP
+    otp_code = str(random.randint(100000, 999999))
+    otp_hash = pwd_context.hash(otp_code)
+    
+    expires_at = datetime.now(timezone.utc) + timedelta(minutes=5)
+    
+    # Invalidate older OTPs for this email
+    await db.execute(delete(EmailOTP).where(EmailOTP.email == email))
+    
+    otp_entry = EmailOTP(email=email, otp_hash=otp_hash, expires_at=expires_at)
+    db.add(otp_entry)
+    await db.commit()
+    
+    # Send email
+    await send_otp_email(email, otp_code)
+    
+    logger.info(f"OTP requested for {email}")
+    return {"message": "OTP sent successfully."}
+
+# ---------------------------------------------------------------------------
+# POST /auth/verify-email-otp
+# ---------------------------------------------------------------------------
+@router.post("/verify-email-otp", response_model=TokenSchema)
+async def verify_email_otp(request: Request, data: EmailOtpVerifySchema, db: AsyncSession = Depends(get_db)):
+    """
+    Verify the OTP and issue JWT tokens.
+    """
+    email = data.email.lower().strip()
+    
+    # Verify OTP
+    result = await db.execute(select(EmailOTP).where(EmailOTP.email == email))
+    otp_entry = result.scalars().first()
+    
+    if not otp_entry:
+        raise HTTPException(status_code=400, detail="No active OTP request found for this email.")
         
-        if not phone_number:
-            raise HTTPException(status_code=400, detail="Firebase token does not contain a phone number.")
-            
-    except Exception as exc:
-        logger.error(f"Firebase token verification failed: {exc}", exc_info=True)
-        raise HTTPException(status_code=401, detail="Invalid Firebase token.")
-
-    masked = _mask_phone(phone_number)
-    logger.info(f"Firebase login attempt for {masked} (role={data.role})")
-
-    # ---------------------------------------------------------------------------
-    # Find or create the user, then issue JWT tokens
-    # ---------------------------------------------------------------------------
+    if _make_aware(otp_entry.expires_at) < datetime.now(timezone.utc):
+        await db.execute(delete(EmailOTP).where(EmailOTP.email == email))
+        await db.commit()
+        raise HTTPException(status_code=400, detail="OTP has expired.")
+        
+    if not pwd_context.verify(data.otp, otp_entry.otp_hash):
+        raise HTTPException(status_code=401, detail="Invalid OTP code.")
+        
+    # OTP is valid, delete it
+    await db.execute(delete(EmailOTP).where(EmailOTP.email == email))
+    
+    # Find or create user
     user_result = await db.execute(
         select(User)
-        .where(User.phone_number == phone_number)
+        .where(User.email == email)
         .where(User.role == data.role)
     )
     user = user_result.scalars().first()
@@ -66,12 +98,12 @@ async def login_firebase(request: Request, data: FirebaseLoginSchema, db: AsyncS
     is_new_user = False
     if not user:
         is_new_user = True
-        user = User(phone_number=phone_number, role=data.role)
+        user = User(email=email, role=data.role)
         db.add(user)
         await db.flush()
-        logger.info(f"New user created for {masked} (role={data.role})")
+        logger.info(f"New user created for {email} (role={data.role})")
     else:
-        logger.info(f"Existing user authenticated: {masked}")
+        logger.info(f"Existing user authenticated: {email}")
 
     access_token = create_access_token(subject=str(user.id), role=getattr(user.role, "value", user.role))
     refresh_token = create_refresh_token(subject=str(user.id))
@@ -86,13 +118,13 @@ async def login_firebase(request: Request, data: FirebaseLoginSchema, db: AsyncS
     ))
     db.add(LoginHistory(
         user_id=user.id,
-        phone_number=phone_number,
+        email=email,
         ip_address=client_ip,
         status="SUCCESS",
         browser=request.headers.get("user-agent"),
     ))
     await db.commit()
-    logger.info(f"JWT issued for {masked}. Login complete.")
+    logger.info(f"JWT issued for {email}. Login complete.")
 
     return TokenSchema(access_token=access_token, refresh_token=refresh_token, is_new_user=is_new_user)
 

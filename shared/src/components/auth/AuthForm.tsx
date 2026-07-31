@@ -1,20 +1,10 @@
 'use client';
-import React, { useState, useEffect, useCallback } from 'react';
-import { PhoneInput } from './PhoneInput';
+import React, { useState, useEffect } from 'react';
 import { OtpInput } from './OtpInput';
 import { apiClient } from '../../api/axios';
 import { setTokens } from '../../store/authSlice';
 import { useDispatch } from 'react-redux';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
-import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
-import { auth } from '../../lib/firebase';
-
-declare global {
-  interface Window {
-    recaptchaVerifier?: RecaptchaVerifier;
-    grecaptcha?: { reset: (widgetId: number) => void };
-  }
-}
 
 interface AuthFormProps {
   onSuccess: (isNewUser: boolean, role: string) => void;
@@ -24,14 +14,12 @@ const RESEND_COOLDOWN_SECONDS = 30;
 
 export function AuthForm({ onSuccess }: AuthFormProps) {
   const [step, setStep] = useState<1 | 2>(1);
-  const [countryCode, setCountryCode] = useState('+91');
-  const [phoneNumber, setPhoneNumber] = useState('');
+  const [email, setEmail] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
-  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
   const dispatch = useDispatch();
 
@@ -42,56 +30,23 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     return () => clearTimeout(timer);
   }, [resendCountdown]);
 
-  const fullPhone = `${countryCode}${phoneNumber}`;
-
-  /** Initialize or retrieve the ReCaptcha Verifier */
-  const setupRecaptcha = () => {
-    if (!window.recaptchaVerifier) {
-      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
-        size: 'invisible',
-        callback: () => {
-          // reCAPTCHA solved
-        }
-      });
-    }
-    return window.recaptchaVerifier;
-  };
-
-  /** Send / resend OTP using Firebase. */
-  const sendOtp = useCallback(async (phone: string): Promise<boolean> => {
-    if (!auth) {
-      throw new Error('Firebase Auth is not initialized. Check your environment variables.');
-    }
-    const appVerifier = setupRecaptcha();
-    try {
-      const confirmation = await signInWithPhoneNumber(auth, phone, appVerifier);
-      setConfirmationResult(confirmation);
-      return true;
-    } catch (err) {
-      // If reCAPTCHA fails, we might need to reset it
-      if (window.recaptchaVerifier && window.grecaptcha) {
-        window.recaptchaVerifier.render().then((widgetId: number) => {
-          window.grecaptcha?.reset(widgetId);
-        });
-      }
-      throw err;
-    }
-  }, []);
-
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (phoneNumber.length < 10) {
-      setError('Please enter a valid 10-digit phone number.');
+    if (!email.includes('@')) {
+      setError('Please enter a valid email address.');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      await sendOtp(fullPhone);
+      await apiClient.post('/auth/request-email-otp', {
+        email: email,
+        role: 'RIDER',
+      });
       setStep(2);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to send OTP. Please check your number and try again.';
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || err.message || 'Failed to send OTP. Please try again.';
       setError(errorMsg);
     } finally {
       setLoading(false);
@@ -103,10 +58,13 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     setError('');
     setResendLoading(true);
     try {
-      await sendOtp(fullPhone);
+      await apiClient.post('/auth/request-email-otp', {
+        email: email,
+        role: 'RIDER',
+      });
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
-    } catch (err) {
-      const errorMsg = err instanceof Error ? err.message : 'Failed to resend OTP. Please try again.';
+    } catch (err: any) {
+      const errorMsg = err.response?.data?.detail || err.message || 'Failed to resend OTP. Please try again.';
       setError(errorMsg);
     } finally {
       setResendLoading(false);
@@ -116,25 +74,15 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length < 6) {
-      setError('Please enter the 6-digit code sent to your phone.');
+      setError('Please enter the 6-digit code sent to your email.');
       return;
     }
     setError('');
     setLoading(true);
     try {
-      if (!confirmationResult) {
-        throw new Error('No OTP request found. Please request a new OTP.');
-      }
-      
-      // 1. Confirm OTP with Firebase
-      const result = await confirmationResult.confirm(otp);
-      
-      // 2. Get Firebase ID Token
-      const idToken = await result.user.getIdToken();
-      
-      // 3. Send ID Token to our backend for final authentication
-      const res = await apiClient.post('/auth/login-firebase', {
-        id_token: idToken,
+      const res = await apiClient.post('/auth/verify-email-otp', {
+        email: email,
+        otp: otp,
         role: 'RIDER',
         device_info: typeof window !== 'undefined' ? navigator.userAgent : 'Web Browser',
       });
@@ -144,19 +92,14 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
         refreshToken: res.data.refresh_token,
       }));
       onSuccess(res.data.is_new_user, 'RIDER');
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      const error = err as { code?: string; message?: string; response?: { data?: { detail?: string | { msg?: string }[] } } };
-      if (error.code === 'auth/invalid-verification-code') {
-         setError('Incorrect OTP. Please try again.');
-      } else {
-         const detail = error.response?.data?.detail;
-         setError(
-           Array.isArray(detail)
-             ? detail[0]?.msg ?? 'Verification failed.'
-             : (detail as string) ?? error.message ?? 'Verification failed. Please try again.',
-         );
-      }
+      const detail = err.response?.data?.detail;
+      setError(
+        Array.isArray(detail)
+          ? detail[0]?.msg ?? 'Verification failed.'
+          : (detail as string) ?? err.message ?? 'Verification failed. Please try again.'
+      );
       setOtp('');
     } finally {
       setLoading(false);
@@ -184,12 +127,10 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className="w-full max-w-md bg-[#0d1525] backdrop-blur-2xl rounded-3xl shadow-[0_12px_50px_rgba(0,0,0,0.7)] border border-gray-800/90 p-8 overflow-hidden relative z-10"
     >
-      {/* Invisible reCAPTCHA container for Firebase */}
-      <div id="recaptcha-container"></div>
       
       {/* Step Progress */}
       <div className="flex items-center justify-center gap-2 mb-7">
-        {['Phone', 'Verify'].map((label, i) => {
+        {['Email', 'Verify'].map((label, i) => {
           const s = i + 1;
           const isActive = step === s;
           const isDone = step > s;
@@ -226,12 +167,12 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
           exit="exit"
         >
           <h2 className="text-2xl font-black text-white mb-1">
-            {step === 1 ? 'Enter your mobile number' : 'Verify your number'}
+            {step === 1 ? 'Enter your email address' : 'Verify your email'}
           </h2>
           <p className="text-gray-500 text-sm mb-6">
             {step === 1
-              ? "We'll send a 6-digit OTP to your phone via SMS."
-              : `Enter the 6-digit code sent to ${countryCode} ${phoneNumber}`}
+              ? "We'll send a 6-digit OTP to your email."
+              : `Enter the 6-digit code sent to ${email}`}
           </p>
 
           {/* Error banner */}
@@ -249,20 +190,22 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
             )}
           </AnimatePresence>
 
-          {/* Step 1 — Phone number input */}
+          {/* Step 1 — Email input */}
           {step === 1 && (
             <form onSubmit={handleRequestOtp} className="flex flex-col gap-5">
-              <PhoneInput
-                countryCode={countryCode}
-                phoneNumber={phoneNumber}
-                onCountryCodeChange={setCountryCode}
-                onPhoneNumberChange={setPhoneNumber}
+              <input
+                type="email"
+                placeholder="you@example.com"
+                value={email}
+                onChange={(e) => setEmail(e.target.value)}
+                className="w-full bg-gray-900/50 text-white placeholder-gray-500 border border-gray-700/50 rounded-xl px-4 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
+                required
               />
               <motion.button
                 whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(59,130,246,0.4)' }}
                 whileTap={{ scale: 0.97 }}
                 type="submit"
-                disabled={loading || phoneNumber.length < 10}
+                disabled={loading || !email}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-950/40"
               >
                 {loading ? <Spinner /> : 'Send OTP →'}
@@ -308,7 +251,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                   onClick={() => { setStep(1); setOtp(''); setError(''); }}
                   className="text-sm text-gray-500 hover:text-gray-300 font-medium transition-colors"
                 >
-                  Change Phone Number
+                  Change Email Address
                 </motion.button>
               </div>
             </form>

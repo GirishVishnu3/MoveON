@@ -17,13 +17,13 @@ class UserStatusEnum(str, enum.Enum):
 
 class User(Base):
     __tablename__ = "users"
-    __table_args__ = (UniqueConstraint('phone_number', 'role', name='uq_user_phone_role'),)
+    __table_args__ = (UniqueConstraint('email', 'role', name='uq_user_email_role'),)
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     role = Column(Enum(RoleEnum), nullable=False)
-    phone_number = Column(String, index=True, nullable=False)
+    phone_number = Column(String, index=True, nullable=True)
     full_name = Column(String, nullable=True)
-    email = Column(String, unique=True, index=True, nullable=True)
+    email = Column(String, unique=True, index=True, nullable=False)
     language = Column(String, default="en")
     status = Column(Enum(UserStatusEnum), default=UserStatusEnum.ACTIVE)
     

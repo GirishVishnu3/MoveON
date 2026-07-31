@@ -66,6 +66,28 @@ MIGRATIONS = [
         NULL;
     END $$;
     """,
+    # Email OTP and Users table updates
+    """
+    DO $$ BEGIN
+        CREATE TABLE IF NOT EXISTS email_otps (
+            id UUID PRIMARY KEY,
+            email VARCHAR NOT NULL,
+            otp_hash VARCHAR NOT NULL,
+            expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
+            created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+        );
+        CREATE INDEX IF NOT EXISTS ix_email_otps_email ON email_otps (email);
+
+        ALTER TABLE users ALTER COLUMN phone_number DROP NOT NULL;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_user_phone_role;
+        
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_email_role') THEN
+            ALTER TABLE users ADD CONSTRAINT uq_user_email_role UNIQUE (email, role);
+        END IF;
+    EXCEPTION WHEN others THEN
+        NULL;
+    END $$;
+    """,
 ]
 
 

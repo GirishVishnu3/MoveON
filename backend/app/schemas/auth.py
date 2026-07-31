@@ -1,12 +1,13 @@
 from pydantic import BaseModel, Field
 from typing import Optional
 
-class OtpRequestSchema(BaseModel):
-    phone_number: str = Field(..., description="Phone number with country code")
-    role: Optional[str] = Field("GUEST", description="Role of the user (RIDER, DRIVER, ADMIN)")
+class EmailOtpRequestSchema(BaseModel):
+    email: str = Field(..., description="User's email address")
+    role: Optional[str] = Field("RIDER", description="Role of the user (RIDER, DRIVER, ADMIN)")
 
-class FirebaseLoginSchema(BaseModel):
-    id_token: str = Field(..., description="Firebase ID token")
+class EmailOtpVerifySchema(BaseModel):
+    email: str = Field(..., description="User's email address")
+    otp: str = Field(..., description="6-digit OTP code")
     role: str = Field(..., description="Role of the user (RIDER, DRIVER, ADMIN)")
     device_info: Optional[str] = None
     
