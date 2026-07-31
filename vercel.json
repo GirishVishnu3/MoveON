@@ -3,6 +3,5 @@
   "installCommand": "npm install",
   "outputDirectory": "apps/web/.next",
   "framework": "nextjs",
-  "installationId": null,
   "ignoreCommand": "git diff HEAD^ HEAD --quiet -- apps/web shared"
 }
