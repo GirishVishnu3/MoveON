@@ -9,6 +9,13 @@ import { motion, AnimatePresence, Variants } from 'framer-motion';
 import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
 import { auth } from '../../lib/firebase';
 
+declare global {
+  interface Window {
+    recaptchaVerifier?: RecaptchaVerifier;
+    grecaptcha?: { reset: (widgetId: number) => void };
+  }
+}
+
 interface AuthFormProps {
   onSuccess: (isNewUser: boolean, role: string) => void;
 }
@@ -60,11 +67,11 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       const confirmation = await signInWithPhoneNumber(auth, phone, appVerifier);
       setConfirmationResult(confirmation);
       return true;
-    } catch (err: any) {
+    } catch (err) {
       // If reCAPTCHA fails, we might need to reset it
-      if (window.recaptchaVerifier) {
-        window.recaptchaVerifier.render().then((widgetId: any) => {
-          window.grecaptcha.reset(widgetId);
+      if (window.recaptchaVerifier && window.grecaptcha) {
+        window.recaptchaVerifier.render().then((widgetId: number) => {
+          window.grecaptcha?.reset(widgetId);
         });
       }
       throw err;
@@ -83,8 +90,9 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       await sendOtp(fullPhone);
       setStep(2);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
-    } catch (err: any) {
-      setError(err.message || 'Failed to send OTP. Please check your number and try again.');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to send OTP. Please check your number and try again.';
+      setError(errorMsg);
     } finally {
       setLoading(false);
     }
@@ -97,8 +105,9 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     try {
       await sendOtp(fullPhone);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
-    } catch (err: any) {
-      setError(err.message || 'Failed to resend OTP. Please try again.');
+    } catch (err) {
+      const errorMsg = err instanceof Error ? err.message : 'Failed to resend OTP. Please try again.';
+      setError(errorMsg);
     } finally {
       setResendLoading(false);
     }
@@ -135,16 +144,17 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
         refreshToken: res.data.refresh_token,
       }));
       onSuccess(res.data.is_new_user, 'RIDER');
-    } catch (err: any) {
+    } catch (err) {
       console.error(err);
-      if (err.code === 'auth/invalid-verification-code') {
+      const error = err as { code?: string; message?: string; response?: { data?: { detail?: string | { msg?: string }[] } } };
+      if (error.code === 'auth/invalid-verification-code') {
          setError('Incorrect OTP. Please try again.');
       } else {
-         const detail = err.response?.data?.detail;
+         const detail = error.response?.data?.detail;
          setError(
            Array.isArray(detail)
              ? detail[0]?.msg ?? 'Verification failed.'
-             : detail ?? err.message ?? 'Verification failed. Please try again.',
+             : (detail as string) ?? error.message ?? 'Verification failed. Please try again.',
          );
       }
       setOtp('');
