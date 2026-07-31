@@ -5,9 +5,8 @@ class OtpRequestSchema(BaseModel):
     phone_number: str = Field(..., description="Phone number with country code")
     role: Optional[str] = Field("GUEST", description="Role of the user (RIDER, DRIVER, ADMIN)")
 
-class OtpVerifySchema(BaseModel):
-    phone_number: str = Field(..., description="Phone number with country code")
-    otp_code: str = Field(..., min_length=6, max_length=6, description="6-digit OTP code")
+class FirebaseLoginSchema(BaseModel):
+    id_token: str = Field(..., description="Firebase ID token")
     role: str = Field(..., description="Role of the user (RIDER, DRIVER, ADMIN)")
     device_info: Optional[str] = None
     

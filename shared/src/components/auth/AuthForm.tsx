@@ -6,6 +6,8 @@ import { apiClient } from '../../api/axios';
 import { setTokens } from '../../store/authSlice';
 import { useDispatch } from 'react-redux';
 import { motion, AnimatePresence, Variants } from 'framer-motion';
+import { RecaptchaVerifier, signInWithPhoneNumber, ConfirmationResult } from 'firebase/auth';
+import { auth } from '../../lib/firebase';
 
 interface AuthFormProps {
   onSuccess: (isNewUser: boolean, role: string) => void;
@@ -22,6 +24,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
   const [error, setError] = useState('');
   const [resendCountdown, setResendCountdown] = useState(0);
   const [resendLoading, setResendLoading] = useState(false);
+  const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
 
   const dispatch = useDispatch();
 
@@ -34,10 +37,38 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
 
   const fullPhone = `${countryCode}${phoneNumber}`;
 
-  /** Send / resend OTP. Returns true on success. */
+  /** Initialize or retrieve the ReCaptcha Verifier */
+  const setupRecaptcha = () => {
+    if (!window.recaptchaVerifier) {
+      window.recaptchaVerifier = new RecaptchaVerifier(auth, 'recaptcha-container', {
+        size: 'invisible',
+        callback: () => {
+          // reCAPTCHA solved
+        }
+      });
+    }
+    return window.recaptchaVerifier;
+  };
+
+  /** Send / resend OTP using Firebase. */
   const sendOtp = useCallback(async (phone: string): Promise<boolean> => {
-    await apiClient.post('/auth/request-otp', { phone_number: phone, role: 'GUEST' });
-    return true;
+    if (!auth) {
+      throw new Error('Firebase Auth is not initialized. Check your environment variables.');
+    }
+    const appVerifier = setupRecaptcha();
+    try {
+      const confirmation = await signInWithPhoneNumber(auth, phone, appVerifier);
+      setConfirmationResult(confirmation);
+      return true;
+    } catch (err: any) {
+      // If reCAPTCHA fails, we might need to reset it
+      if (window.recaptchaVerifier) {
+        window.recaptchaVerifier.render().then((widgetId: any) => {
+          window.grecaptcha.reset(widgetId);
+        });
+      }
+      throw err;
+    }
   }, []);
 
   const handleRequestOtp = async (e: React.FormEvent) => {
@@ -53,12 +84,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       setStep(2);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(
-        Array.isArray(detail)
-          ? detail[0]?.msg ?? 'Validation error.'
-          : detail ?? 'Failed to send OTP. Please check your number and try again.',
-      );
+      setError(err.message || 'Failed to send OTP. Please check your number and try again.');
     } finally {
       setLoading(false);
     }
@@ -72,12 +98,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       await sendOtp(fullPhone);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(
-        Array.isArray(detail)
-          ? detail[0]?.msg ?? 'Failed to resend OTP.'
-          : detail ?? 'Failed to resend OTP. Please try again.',
-      );
+      setError(err.message || 'Failed to resend OTP. Please try again.');
     } finally {
       setResendLoading(false);
     }
@@ -92,24 +113,40 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     setError('');
     setLoading(true);
     try {
-      const res = await apiClient.post('/auth/verify-otp', {
-        phone_number: fullPhone,
-        otp_code: otp,
+      if (!confirmationResult) {
+        throw new Error('No OTP request found. Please request a new OTP.');
+      }
+      
+      // 1. Confirm OTP with Firebase
+      const result = await confirmationResult.confirm(otp);
+      
+      // 2. Get Firebase ID Token
+      const idToken = await result.user.getIdToken();
+      
+      // 3. Send ID Token to our backend for final authentication
+      const res = await apiClient.post('/auth/login-firebase', {
+        id_token: idToken,
         role: 'RIDER',
         device_info: typeof window !== 'undefined' ? navigator.userAgent : 'Web Browser',
       });
+      
       dispatch(setTokens({
         accessToken: res.data.access_token,
         refreshToken: res.data.refresh_token,
       }));
       onSuccess(res.data.is_new_user, 'RIDER');
     } catch (err: any) {
-      const detail = err.response?.data?.detail;
-      setError(
-        Array.isArray(detail)
-          ? detail[0]?.msg ?? 'Verification failed.'
-          : detail ?? 'Incorrect OTP. Please try again.',
-      );
+      console.error(err);
+      if (err.code === 'auth/invalid-verification-code') {
+         setError('Incorrect OTP. Please try again.');
+      } else {
+         const detail = err.response?.data?.detail;
+         setError(
+           Array.isArray(detail)
+             ? detail[0]?.msg ?? 'Verification failed.'
+             : detail ?? err.message ?? 'Verification failed. Please try again.',
+         );
+      }
       setOtp('');
     } finally {
       setLoading(false);
@@ -137,6 +174,9 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
       transition={{ duration: 0.6, ease: [0.16, 1, 0.3, 1] }}
       className="w-full max-w-md bg-[#0d1525] backdrop-blur-2xl rounded-3xl shadow-[0_12px_50px_rgba(0,0,0,0.7)] border border-gray-800/90 p-8 overflow-hidden relative z-10"
     >
+      {/* Invisible reCAPTCHA container for Firebase */}
+      <div id="recaptcha-container"></div>
+      
       {/* Step Progress */}
       <div className="flex items-center justify-center gap-2 mb-7">
         {['Phone', 'Verify'].map((label, i) => {
