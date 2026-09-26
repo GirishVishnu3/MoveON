@@ -8,6 +8,7 @@ interface VehicleListProps {
   onSelect: (v: Vehicle) => void;
   couponDiscount?: number;
   isLoading?: boolean;
+  currencySymbol?: string;
 }
 
 type SortKey = 'eta' | 'price_asc' | 'price_desc' | 'comfort';
@@ -17,7 +18,7 @@ const comfortRank: Record<string, number> = {
 };
 
 export default function VehicleList({
-  vehicles, selectedCategory, onSelect, couponDiscount = 0, isLoading = false,
+  vehicles, selectedCategory, onSelect, couponDiscount = 0, isLoading = false, currencySymbol = '₹',
 }: VehicleListProps) {
   const [sort, setSort] = useState<SortKey>('eta');
   const [filterComfort, setFilterComfort] = useState<string>('All');
@@ -85,6 +86,7 @@ export default function VehicleList({
             selected={selectedCategory === v.category}
             onSelect={onSelect}
             couponDiscount={couponDiscount}
+            currencySymbol={currencySymbol}
           />
         ))
       )}

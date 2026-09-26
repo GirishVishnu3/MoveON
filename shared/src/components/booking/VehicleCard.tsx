@@ -101,9 +101,11 @@ interface VehicleCardProps {
   selected: boolean;
   onSelect: (v: Vehicle) => void;
   couponDiscount?: number;
+  currencySymbol?: string;
 }
 
-export default function VehicleCard({ vehicle, selected, onSelect, couponDiscount = 0 }: VehicleCardProps) {
+export default function VehicleCard({ vehicle, selected, onSelect, couponDiscount = 0, currencySymbol = '₹' }: VehicleCardProps) {
+  const sym = currencySymbol || (vehicle.fare_breakdown?.currency === 'GBP' ? '£' : '₹');
   const discountedFare = Math.max(0, vehicle.fare - (selected ? couponDiscount : 0));
 
   return (
@@ -146,11 +148,11 @@ export default function VehicleCard({ vehicle, selected, onSelect, couponDiscoun
       <div className="flex-shrink-0 text-right">
         {couponDiscount > 0 && selected ? (
           <>
-            <div className="text-xs line-through text-gray-400">₹{vehicle.fare.toFixed(0)}</div>
-            <div className="text-lg font-bold text-green-600">₹{discountedFare.toFixed(0)}</div>
+            <div className="text-xs line-through text-gray-400">{sym}{vehicle.fare.toFixed(0)}</div>
+            <div className="text-lg font-bold text-green-600">{sym}{discountedFare.toFixed(0)}</div>
           </>
         ) : (
-          <div className="text-lg font-bold text-gray-900">₹{vehicle.fare.toFixed(0)}</div>
+          <div className="text-lg font-bold text-gray-900">{sym}{vehicle.fare.toFixed(0)}</div>
         )}
         <div className="text-xs text-gray-400">estimated</div>
       </div>

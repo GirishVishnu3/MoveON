@@ -33,4 +33,3 @@ uvicorn==0.51.0
 websockets==16.1
 aiosqlite==0.21.0
 firebase-admin==6.6.0
-aiosmtplib

@@ -66,23 +66,26 @@ MIGRATIONS = [
         NULL;
     END $$;
     """,
-    # Email OTP and Users table updates
+    # Phone OTP and Users table updates
     """
     DO $$ BEGIN
-        CREATE TABLE IF NOT EXISTS email_otps (
+        DROP TABLE IF EXISTS email_otps CASCADE;
+        
+        CREATE TABLE IF NOT EXISTS phone_otps (
             id UUID PRIMARY KEY,
-            email VARCHAR NOT NULL,
+            phone_number VARCHAR NOT NULL,
             otp_hash VARCHAR NOT NULL,
             expires_at TIMESTAMP WITH TIME ZONE NOT NULL,
             created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
         );
-        CREATE INDEX IF NOT EXISTS ix_email_otps_email ON email_otps (email);
+        CREATE INDEX IF NOT EXISTS ix_phone_otps_phone_number ON phone_otps (phone_number);
 
-        ALTER TABLE users ALTER COLUMN phone_number DROP NOT NULL;
-        ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_user_phone_role;
+        ALTER TABLE users ALTER COLUMN email DROP NOT NULL;
+        ALTER TABLE users ALTER COLUMN phone_number SET NOT NULL;
+        ALTER TABLE users DROP CONSTRAINT IF EXISTS uq_user_email_role;
         
-        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_email_role') THEN
-            ALTER TABLE users ADD CONSTRAINT uq_user_email_role UNIQUE (email, role);
+        IF NOT EXISTS (SELECT 1 FROM pg_constraint WHERE conname = 'uq_user_phone_role') THEN
+            ALTER TABLE users ADD CONSTRAINT uq_user_phone_role UNIQUE (phone_number, role);
         END IF;
     EXCEPTION WHEN others THEN
         NULL;

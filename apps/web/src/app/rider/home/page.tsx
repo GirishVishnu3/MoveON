@@ -30,10 +30,24 @@ export default function RiderHomePage() {
     }
   }, []);
 
+  const [selectedCountry, setSelectedCountry] = useState<'IN' | 'GB'>('IN');
+
+  useEffect(() => {
+    const saved = localStorage.getItem('moveon_selected_country') as 'IN' | 'GB';
+    if (saved && (saved === 'IN' || saved === 'GB')) {
+      setSelectedCountry(saved);
+    }
+  }, []);
+
+  const handleCountryChange = (code: 'IN' | 'GB') => {
+    setSelectedCountry(code);
+    localStorage.setItem('moveon_selected_country', code);
+  };
+
   const handleSelect = (type: 'INTERCITY' | 'INTRACITY') => {
     dispatch(setRideType(type));
-    if (type === 'INTERCITY') router.push('/rider/intercity');
-    else router.push('/rider/intracity');
+    if (type === 'INTERCITY') router.push(`/rider/intercity?country=${selectedCountry}`);
+    else router.push(`/rider/intracity?country=${selectedCountry}`);
   };
 
   return (
@@ -59,7 +73,34 @@ export default function RiderHomePage() {
           </span>
         </div>
 
+        {/* Top Right Actions — Country Switcher + Navigation */}
         <div className="flex items-center space-x-3">
+          {/* Country Selector Pill */}
+          <div className="flex items-center bg-gray-900/80 border border-gray-800 rounded-xl p-1 gap-1">
+            <button
+              onClick={() => handleCountryChange('IN')}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
+                selectedCountry === 'IN'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+              }`}
+            >
+              <span>🇮🇳</span>
+              <span>India</span>
+            </button>
+            <button
+              onClick={() => handleCountryChange('GB')}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-lg transition-all ${
+                selectedCountry === 'GB'
+                  ? 'bg-blue-600 text-white shadow-md shadow-blue-900/50'
+                  : 'text-gray-400 hover:text-white hover:bg-gray-800/60'
+              }`}
+            >
+              <span>🇬🇧</span>
+              <span>UK</span>
+            </button>
+          </div>
+
           <NotificationBadge />
           <Link 
             href="/rider/wallet" 
@@ -92,7 +133,7 @@ export default function RiderHomePage() {
             Where to today?
           </h1>
           <p className="text-gray-400 text-sm mt-2">
-            Select your journey type to find drivers near you
+            Select your journey type to find drivers near you in <strong className="text-blue-400">{selectedCountry === 'GB' ? 'United Kingdom (GBP £)' : 'India (INR ₹)'}</strong>
           </p>
         </motion.div>
 
@@ -110,10 +151,10 @@ export default function RiderHomePage() {
             <div>
               <span className="text-[10px] font-black uppercase tracking-widest text-blue-400 mb-1 block">Local Rides</span>
               <h3 className="text-2xl font-bold text-white group-hover:text-blue-300 transition-colors">IntraCity</h3>
-              <p className="text-xs text-gray-400 mt-1">Daily commutes, cabs, autos & bike taxis inside the city.</p>
+              <p className="text-xs text-gray-400 mt-1">Daily commutes, cabs, autos &amp; bike taxis inside the city.</p>
             </div>
             <div className="flex items-center justify-between text-xs font-bold text-blue-400 pt-2">
-              <span>Book Local Cab</span>
+              <span>Book Local Cab ({selectedCountry === 'GB' ? 'UK' : 'India'})</span>
               <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
             </div>
           </motion.button>
@@ -131,10 +172,10 @@ export default function RiderHomePage() {
             <div>
               <span className="text-[10px] font-black uppercase tracking-widest text-emerald-400 mb-1 block">Outstation Travels</span>
               <h3 className="text-2xl font-bold text-white group-hover:text-emerald-300 transition-colors">InterCity</h3>
-              <p className="text-xs text-gray-400 mt-1">Comfortable long-distance rides & city-to-city cabs.</p>
+              <p className="text-xs text-gray-400 mt-1">Comfortable long-distance rides &amp; city-to-city cabs.</p>
             </div>
             <div className="flex items-center justify-between text-xs font-bold text-emerald-400 pt-2">
-              <span>Book Outstation Cab</span>
+              <span>Book Outstation Cab ({selectedCountry === 'GB' ? 'UK' : 'India'})</span>
               <span className="text-lg group-hover:translate-x-1 transition-transform">→</span>
             </div>
           </motion.button>

@@ -1,11 +1,19 @@
 from app.models.booking import RideType, VehicleCategory
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 
 class VehicleService:
     @staticmethod
-    def get_available_vehicles(ride_type: RideType, lat: float, lon: float) -> List[Dict[str, Any]]:
+    def get_available_vehicles(ride_type: RideType, lat: float, lon: float, country_code: Optional[str] = None) -> List[Dict[str, Any]]:
         # This acts as the catalog of supported vehicles based on the ride type.
         # In a fully deployed system, ETAs would be computed dynamically from online drivers nearby.
+
+        # Detect UK either from explicit country_code or lat/lon coordinates
+        # UK approximate bounding box: lat 49.8 to 60.9, lon -8.6 to 1.8
+        is_uk = False
+        if country_code:
+            is_uk = country_code.upper() in ["GB", "UK", "UNITED KINGDOM"]
+        elif 49.8 <= lat <= 60.9 and -8.6 <= lon <= 1.8:
+            is_uk = True
 
         # Base UI attributes for ALL vehicle types (keyed by category enum value string)
         ui_attributes: Dict[str, Dict] = {
@@ -71,7 +79,14 @@ class VehicleService:
             },
         }
 
-        if ride_type == RideType.INTRACITY:
+        if is_uk:
+            # In the UK, only two types of vehicles: 4-seater and 6-seater
+            eta_base = 15 if ride_type == RideType.INTERCITY else 4
+            vehicles = [
+                {"category": "SEDAN", "display_name": "4 Seater", "eta_min": eta_base, "eta_max": eta_base + 3},
+                {"category": "SUV",   "display_name": "6 Seater", "eta_min": eta_base + 2, "eta_max": eta_base + 6},
+            ]
+        elif ride_type == RideType.INTRACITY:
             vehicles = [
                 {"category": "BIKE",           "display_name": "Bike",          "eta_min": 3,  "eta_max": 5},
                 {"category": "AUTO_RICKSHAW",  "display_name": "Auto",          "eta_min": 5,  "eta_max": 8},
@@ -94,7 +109,14 @@ class VehicleService:
         result = []
         for v in vehicles:
             cat = v["category"]
-            attrs = ui_attributes.get(cat, ui_attributes["SEDAN"])
+            attrs = dict(ui_attributes.get(cat, ui_attributes["SEDAN"]))
+            if is_uk:
+                if cat == "SEDAN":
+                    attrs["comfort"] = "Standard (4 Seats)"
+                    attrs["seats"] = 4
+                elif cat == "SUV":
+                    attrs["comfort"] = "XL (6 Seats)"
+                    attrs["seats"] = 6
             full_v = {
                 **v,
                 **attrs,

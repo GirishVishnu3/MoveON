@@ -44,12 +44,19 @@ async def estimate_fare(request: FareEstimateRequest, db: AsyncSession = Depends
     """
     estimate_id = str(uuid.uuid4())
 
+    country_code = getattr(request, "country_code", None)
+    if not country_code and request.pickup_lat and request.pickup_lon:
+        if 49.8 <= request.pickup_lat <= 60.9 and -8.6 <= request.pickup_lon <= 1.8:
+            country_code = "GB"
+
     # Resolve city (non-fatal — falls back to global rules if geocoding fails)
     city = None
     city_id = None
     try:
         if request.pickup_lat and request.pickup_lon:
-            city = await LocationService.resolve_city_from_coords(db, request.pickup_lat, request.pickup_lon)
+            city = await LocationService.resolve_city_from_coords(
+                db, request.pickup_lat, request.pickup_lon, country_code=country_code
+            )
             city_id = str(city.id) if city else None
             if city:
                 logger.info(f"[Estimate] Resolved city: {city.name} ({city_id})")
@@ -71,6 +78,7 @@ async def estimate_fare(request: FareEstimateRequest, db: AsyncSession = Depends
         is_round_trip=getattr(request, "is_round_trip", False),
         is_airport_pickup=getattr(request, "is_airport_pickup", False),
         is_airport_drop=getattr(request, "is_airport_drop", False),
+        country_code=country_code,
     )
 
     if not all_fares:
@@ -83,7 +91,12 @@ async def estimate_fare(request: FareEstimateRequest, db: AsyncSession = Depends
         )
 
     # Merge with vehicle metadata from VehicleService
-    vehicles = VehicleService.get_available_vehicles(request.ride_type, request.pickup_lat, request.pickup_lon)
+    vehicles = VehicleService.get_available_vehicles(
+        request.ride_type,
+        request.pickup_lat,
+        request.pickup_lon,
+        country_code=getattr(request, "country_code", None),
+    )
     vehicle_meta = {v["category"]: v for v in vehicles}
 
     vehicles_with_fares = []

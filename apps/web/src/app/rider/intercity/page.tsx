@@ -19,6 +19,7 @@ import RideScheduler from 'shared/src/components/booking/RideScheduler';
 import BookingConfirmationDialog from 'shared/src/components/booking/BookingConfirmationDialog';
 import { apiClient } from 'shared/src/api/axios';
 import type { Vehicle } from 'shared/src/types/booking';
+import { CITIES_BY_COUNTRY, CountryCode, getCurrencyForCountry } from 'shared/src/data/citiesData';
 
 import dynamic from 'next/dynamic';
 const RouteMap = dynamic(() => import('../../../components/RouteMap'), { ssr: false });
@@ -123,6 +124,10 @@ export default function IntercityPage() {
       setRouteInfo({ distanceKm, durationMin });
 
       const isRoundTrip = booking.tripType === 'ROUND_TRIP';
+      const lat = location.pickup.lat;
+      const lon = location.pickup.lon;
+      const intercityCountry = (lat >= 49.8 && lat <= 60.9 && lon >= -8.6 && lon <= 1.8) ? 'GB' : 'IN';
+
       const res = await apiClient.post('/booking/estimate', {
         ride_type: 'INTERCITY',
         distance_km: distanceKm,
@@ -132,10 +137,19 @@ export default function IntercityPage() {
         destination_lat: location.destination.lat,
         destination_lon: location.destination.lon,
         is_round_trip: isRoundTrip,
+        country_code: intercityCountry,
       });
-      setVehicles(res.data.vehicles);
-    } catch (e) {
-      setError('Could not fetch route or fare estimates.');
+      let returnedVehicles: Vehicle[] = res.data.vehicles || [];
+      if (intercityCountry === 'GB') {
+        returnedVehicles = returnedVehicles.filter(
+          v => v.category === 'SEDAN' || v.category === 'SUV'
+        );
+      }
+      setVehicles(returnedVehicles);
+    } catch (e: any) {
+      console.error('Intercity estimation error:', e);
+      const detail = e?.response?.data?.detail;
+      setError(typeof detail === 'string' ? detail : 'Could not fetch route or fare estimates.');
     } finally {
       dispatch(setIsLoadingFare(false));
     }
@@ -207,6 +221,12 @@ export default function IntercityPage() {
 
   const couponDiscount = booking.couponResult?.valid ? (booking.couponResult.discount_amount || 0) : 0;
   const totalFare = booking.selectedVehicle ? Math.max(0, booking.selectedVehicle.fare - couponDiscount) : 0;
+
+  // Determine currency based on pickup coordinates or fare currency
+  const isUK = (location.pickup && location.pickup.lat >= 49.8 && location.pickup.lat <= 60.9 && location.pickup.lon >= -8.6 && location.pickup.lon <= 1.8)
+    || (booking.selectedVehicle?.fare_breakdown?.currency === 'GBP')
+    || (location.pickup?.address?.toLowerCase().includes('united kingdom') || location.pickup?.address?.toLowerCase().includes('uk') || location.pickup?.address?.toLowerCase().includes('england') || location.pickup?.address?.toLowerCase().includes('scotland'));
+  const currencySymbol = isUK ? '£' : '₹';
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -328,17 +348,33 @@ export default function IntercityPage() {
           {(vehicles.length > 0 || booking.isLoadingFare) && (
             <div className="flex flex-col gap-2">
               <h2 className="text-sm font-semibold text-gray-700 px-1">Available Rides</h2>
-              <VehicleList vehicles={vehicles} selectedCategory={booking.selectedVehicle?.category || null}
-                onSelect={(v) => dispatch(setSelectedVehicle(v))} couponDiscount={couponDiscount} isLoading={booking.isLoadingFare} />
+              <VehicleList
+                vehicles={vehicles}
+                selectedCategory={booking.selectedVehicle?.category || null}
+                onSelect={(v) => dispatch(setSelectedVehicle(v))}
+                couponDiscount={couponDiscount}
+                isLoading={booking.isLoadingFare}
+                currencySymbol={currencySymbol}
+              />
             </div>
           )}
 
           {booking.selectedVehicle && (
             <>
+              <FareBreakdownPanel
+                fare={booking.selectedVehicle.fare_breakdown}
+                couponDiscount={couponDiscount}
+                currencySymbol={currencySymbol}
+              />
 
-              <CouponSelector rideType="INTERCITY" fare={booking.selectedVehicle.fare}
-                onCouponApplied={(r) => dispatch(setCouponResult(r))} onCouponCleared={() => dispatch(setCouponResult(null))}
-                appliedCoupon={booking.couponResult} />
+              <CouponSelector
+                rideType="INTERCITY"
+                fare={booking.selectedVehicle.fare}
+                onCouponApplied={(r) => dispatch(setCouponResult(r))}
+                onCouponCleared={() => dispatch(setCouponResult(null))}
+                appliedCoupon={booking.couponResult}
+                currencySymbol={currencySymbol}
+              />
               <BookingPreferencesPanel preferences={booking.preferences} onChange={(p) => dispatch(setPreferences(p))} />
               <div className="bg-white rounded-2xl border border-gray-100 shadow-sm p-4">
                 <h3 className="font-semibold text-gray-800 mb-3">Payment Method</h3>
@@ -360,7 +396,7 @@ export default function IntercityPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <p className="text-sm text-gray-500">{booking.selectedVehicle.display_name}</p>
-                  <p className="text-2xl font-bold text-gray-900">₹{totalFare.toFixed(0)}</p>
+                  <p className="text-2xl font-bold text-gray-900">{currencySymbol}{totalFare.toFixed(0)}</p>
                 </div>
                 <button onClick={() => setShowConfirmDialog(true)}
                   className="px-8 py-3.5 bg-blue-600 hover:bg-blue-700 text-white font-bold rounded-2xl transition-colors shadow-lg shadow-blue-200">
@@ -386,7 +422,7 @@ export default function IntercityPage() {
       <BookingConfirmationDialog open={showConfirmDialog} vehicle={booking.selectedVehicle} totalFare={totalFare}
         pickupAddress={location.pickup?.address || ''} destinationAddress={location.destination?.address || ''}
         bookingRef={booking.bookingRef} onClose={() => setShowConfirmDialog(false)}
-        onConfirm={handleConfirm} isConfirming={booking.isConfirming} />
+        onConfirm={handleConfirm} isConfirming={booking.isConfirming} currencySymbol={currencySymbol} />
     </div>
   );
 }

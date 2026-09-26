@@ -15,7 +15,7 @@ const RESEND_COOLDOWN_SECONDS = 30;
 export function AuthForm({ onSuccess }: AuthFormProps) {
   const [isSignUp, setIsSignUp] = useState(false);
   const [step, setStep] = useState<1 | 2>(1);
-  const [email, setEmail] = useState('');
+  const [phoneNumber, setPhoneNumber] = useState('');
   const [fullName, setFullName] = useState('');
   const [otp, setOtp] = useState('');
   const [loading, setLoading] = useState(false);
@@ -34,8 +34,8 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
 
   const handleRequestOtp = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!email.includes('@')) {
-      setError('Please enter a valid email address.');
+    if (!phoneNumber || phoneNumber.length < 5) {
+      setError('Please enter a valid phone number.');
       return;
     }
     if (isSignUp && fullName.trim().length < 2) {
@@ -45,12 +45,15 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     setError('');
     setLoading(true);
     try {
-      await apiClient.post('/auth/request-email-otp', {
-        email: email,
+      const res = await apiClient.post('/auth/request-otp', {
+        phone_number: phoneNumber,
         role: 'RIDER',
       });
       setStep(2);
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
+      if (res.data?.otp) {
+        alert(`TEST MODE - Your OTP code is: ${res.data.otp}`);
+      }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Failed to send OTP. Please try again.';
       setError(errorMsg);
@@ -64,11 +67,14 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
     setError('');
     setResendLoading(true);
     try {
-      await apiClient.post('/auth/request-email-otp', {
-        email: email,
+      const res = await apiClient.post('/auth/request-otp', {
+        phone_number: phoneNumber,
         role: 'RIDER',
       });
       setResendCountdown(RESEND_COOLDOWN_SECONDS);
+      if (res.data?.otp) {
+        alert(`TEST MODE - Your OTP code is: ${res.data.otp}`);
+      }
     } catch (err: any) {
       const errorMsg = err.response?.data?.detail || err.message || 'Failed to resend OTP. Please try again.';
       setError(errorMsg);
@@ -80,14 +86,14 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
   const handleVerifyOtp = async (e: React.FormEvent) => {
     e.preventDefault();
     if (otp.length < 6) {
-      setError('Please enter the 6-digit code sent to your email.');
+      setError('Please enter the 6-digit code sent to your phone number.');
       return;
     }
     setError('');
     setLoading(true);
     try {
       const payload: any = {
-        email: email,
+        phone_number: phoneNumber,
         otp: otp,
         role: 'RIDER',
         device_info: typeof window !== 'undefined' ? navigator.userAgent : 'Web Browser',
@@ -97,7 +103,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
         payload.full_name = fullName.trim();
       }
 
-      const res = await apiClient.post('/auth/verify-email-otp', payload);
+      const res = await apiClient.post('/auth/verify-otp', payload);
       
       dispatch(setTokens({
         accessToken: res.data.access_token,
@@ -179,12 +185,12 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
           exit="exit"
         >
           <h2 className="text-2xl font-black text-white mb-1">
-            {step === 1 ? (isSignUp ? 'Create an account' : 'Welcome back') : 'Verify your email'}
+            {step === 1 ? (isSignUp ? 'Create an account' : 'Welcome back') : 'Verify your phone'}
           </h2>
           <p className="text-gray-500 text-sm mb-6">
             {step === 1
-              ? "We'll send a 6-digit OTP to your email."
-              : `Enter the 6-digit code sent to ${email}`}
+              ? "We'll send a 6-digit OTP to your phone number."
+              : `Enter the 6-digit code sent to ${phoneNumber}`}
           </p>
 
           {/* Error banner */}
@@ -202,7 +208,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
             )}
           </AnimatePresence>
 
-          {/* Step 1 — Email input */}
+          {/* Step 1 — Phone input */}
           {step === 1 && (
             <form onSubmit={handleRequestOtp} className="flex flex-col gap-5">
               {isSignUp && (
@@ -216,10 +222,10 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                 />
               )}
               <input
-                type="email"
-                placeholder="you@example.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                type="tel"
+                placeholder="+1234567890"
+                value={phoneNumber}
+                onChange={(e) => setPhoneNumber(e.target.value)}
                 className="w-full bg-gray-900/50 text-white placeholder-gray-500 border border-gray-700/50 rounded-xl px-4 py-4 text-lg focus:outline-none focus:ring-2 focus:ring-blue-500/50 focus:border-blue-500 transition-all"
                 required
               />
@@ -227,7 +233,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                 whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(59,130,246,0.4)' }}
                 whileTap={{ scale: 0.97 }}
                 type="submit"
-                disabled={loading || !email || (isSignUp && fullName.length < 2)}
+                disabled={loading || !phoneNumber || (isSignUp && fullName.length < 2)}
                 className="w-full bg-blue-600 hover:bg-blue-500 text-white font-bold py-4 rounded-xl transition-all disabled:opacity-60 disabled:cursor-not-allowed flex items-center justify-center gap-2 shadow-lg shadow-blue-950/40"
               >
                 {loading ? <Spinner /> : 'Send OTP →'}
@@ -283,7 +289,7 @@ export function AuthForm({ onSuccess }: AuthFormProps) {
                   onClick={() => { setStep(1); setOtp(''); setError(''); }}
                   className="text-sm text-gray-500 hover:text-gray-300 font-medium transition-colors"
                 >
-                  Change Email Address
+                  Change Phone Number
                 </motion.button>
               </div>
             </form>

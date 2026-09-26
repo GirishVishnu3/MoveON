@@ -48,34 +48,71 @@ class LocationService:
         return result
 
     @staticmethod
-    async def resolve_city_from_coords(db: AsyncSession, lat: float, lon: float) -> Optional["City"]:
+    async def resolve_city_from_coords(
+        db: AsyncSession,
+        lat: float,
+        lon: float,
+        country_code: Optional[str] = None
+    ) -> Optional["City"]:
         """
         Resolves a lat/lon pair to a City record in the database.
-        Uses Nominatim reverse geocoding to get the city name, then 
-        performs a case-insensitive DB lookup. Falls back to None (global rules apply).
+        1. Checks geometric distance against registered cities (fast, reliable, offline-safe).
+        2. If country_code (or UK coords) is provided, finds the nearest city in that country.
+        3. Falls back to Nominatim reverse geocoding if needed.
         """
         try:
+            # 1. Fetch active cities
+            result = await db.execute(select(City).where(City.is_active == True))
+            all_cities = result.scalars().all()
+
+            best_city = None
+            min_dist = float("inf")
+
+            for c in all_cities:
+                if c.lat_center is not None and c.lon_center is not None:
+                    dist = LocationService._haversine(lat, lon, c.lat_center, c.lon_center)
+                    radius = c.radius_km or 50.0
+                    if dist <= radius and dist < min_dist:
+                        min_dist = dist
+                        best_city = c
+
+            if best_city:
+                return best_city
+
+            # 2. Country-aware proximity fallback
+            is_uk = (country_code == "GB") or (49.8 <= lat <= 60.9 and -8.6 <= lon <= 1.8)
+            target_country = "United Kingdom" if is_uk else ("India" if country_code == "IN" else None)
+
+            if target_country:
+                country_cities = [c for c in all_cities if c.country == target_country and c.lat_center is not None]
+                if country_cities:
+                    best_country_city = min(
+                        country_cities,
+                        key=lambda c: LocationService._haversine(lat, lon, c.lat_center, c.lon_center)
+                    )
+                    return best_country_city
+
+            # 3. Fallback: Nominatim reverse geocoding
             geo_result = await NominatimClient.reverse(lat, lon)
-            if not geo_result:
-                return None
-            # Nominatim returns address with 'city', 'town', 'village' fields
-            address = geo_result.get("address", {})
-            city_name = (
-                address.get("city") or
-                address.get("town") or
-                address.get("village") or
-                address.get("county") or
-                ""
-            )
-            if not city_name:
-                return None
-            result = await db.execute(
-                select(City).where(
-                    City.name.ilike(f"%{city_name}%"),
-                    City.is_active == True
-                ).limit(1)
-            )
-            return result.scalar_one_or_none()
+            if geo_result:
+                address = geo_result.get("address", {})
+                city_name = (
+                    address.get("city") or
+                    address.get("town") or
+                    address.get("village") or
+                    address.get("county") or
+                    ""
+                )
+                if city_name:
+                    res = await db.execute(
+                        select(City).where(
+                            City.name.ilike(f"%{city_name}%"),
+                            City.is_active == True
+                        ).limit(1)
+                    )
+                    return res.scalar_one_or_none()
+
+            return None
         except Exception:
             await db.rollback()
             return None

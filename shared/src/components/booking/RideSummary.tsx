@@ -10,11 +10,13 @@ interface RideSummaryProps {
   paymentMethod: string;
   distanceKm?: number;
   durationMin?: number;
+  currencySymbol?: string;
 }
 
 export default function RideSummary({
-  pickupAddress, destinationAddress, vehicle, fareBreakdown, couponResult, paymentMethod, distanceKm, durationMin,
+  pickupAddress, destinationAddress, vehicle, fareBreakdown, couponResult, paymentMethod, distanceKm, durationMin, currencySymbol = '₹',
 }: RideSummaryProps) {
+  const sym = currencySymbol || (fareBreakdown?.currency === 'GBP' ? '£' : '₹');
   const couponDiscount = couponResult?.valid ? (couponResult.discount_amount || 0) : 0;
   const totalFare = fareBreakdown ? Math.max(0, fareBreakdown.total_fare - couponDiscount) : 0;
 
@@ -57,9 +59,9 @@ export default function RideSummary({
           <span className="text-sm text-gray-600">Estimated Fare</span>
           <div className="text-right">
             {couponDiscount > 0 && (
-              <span className="text-xs line-through text-gray-400 mr-1">₹{fareBreakdown.total_fare.toFixed(0)}</span>
+              <span className="text-xs line-through text-gray-400 mr-1">{sym}{fareBreakdown.total_fare.toFixed(0)}</span>
             )}
-            <span className="font-bold text-blue-600 text-lg">₹{totalFare.toFixed(0)}</span>
+            <span className="font-bold text-blue-600 text-lg">{sym}{totalFare.toFixed(0)}</span>
           </div>
         </div>
       )}

@@ -11,12 +11,14 @@ interface BookingConfirmationDialogProps {
   onClose: () => void;
   onConfirm: () => void;
   isConfirming: boolean;
+  currencySymbol?: string;
 }
 
 export default function BookingConfirmationDialog({
   open, vehicle, totalFare, pickupAddress, destinationAddress,
-  bookingRef, onClose, onConfirm, isConfirming,
+  bookingRef, onClose, onConfirm, isConfirming, currencySymbol = '₹',
 }: BookingConfirmationDialogProps) {
+  const sym = currencySymbol || (vehicle?.fare_breakdown?.currency === 'GBP' ? '£' : '₹');
   if (!open) return null;
 
   // Searching for driver state
@@ -47,7 +49,7 @@ export default function BookingConfirmationDialog({
             </div>
             <div className="flex justify-between text-sm">
               <span className="text-gray-500">Total Fare</span>
-              <span className="font-semibold text-blue-600">₹{totalFare.toFixed(0)}</span>
+              <span className="font-semibold text-blue-600">{sym}{totalFare.toFixed(0)}</span>
             </div>
           </div>
 
@@ -85,7 +87,7 @@ export default function BookingConfirmationDialog({
               <p className="font-semibold text-gray-900">{vehicle?.display_name}</p>
               <p className="text-xs text-gray-500">{vehicle?.comfort} · {vehicle?.seats} seats</p>
             </div>
-            <p className="text-xl font-bold text-blue-600">₹{totalFare.toFixed(0)}</p>
+            <p className="text-xl font-bold text-blue-600">{sym}{totalFare.toFixed(0)}</p>
           </div>
         </div>
 

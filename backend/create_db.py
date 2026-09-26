@@ -8,7 +8,7 @@ from app.database.database import engine, Base
 # Import ALL models so SQLAlchemy knows about them
 from app.models.user import User
 from app.models.auth import OtpRequest, AuthSession, LoginHistory
-from app.models.otp import EmailOTP
+from app.models.otp import PhoneOTP
 from app.models.booking import Booking, FareEstimate, BookingPreference, BookingStatusHistory, Coupon
 from app.models.payment import Payment, Invoice
 from app.models.wallet import Wallet, WalletTransaction

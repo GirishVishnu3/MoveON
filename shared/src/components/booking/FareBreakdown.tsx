@@ -5,11 +5,13 @@ interface FareBreakdownProps {
   fare: FareBreakdownData;
   couponDiscount?: number;
   couponCode?: string;
+  currencySymbol?: string;
 }
 
 interface LineItem { label: string; amount: number; highlight?: string; }
 
-export default function FareBreakdownPanel({ fare, couponDiscount = 0, couponCode }: FareBreakdownProps) {
+export default function FareBreakdownPanel({ fare, couponDiscount = 0, couponCode, currencySymbol = '₹' }: FareBreakdownProps) {
+  const sym = currencySymbol || (fare.currency === 'GBP' ? '£' : '₹');
   // Support both old and new field names
   const distanceLabel = fare.effective_distance_km ?? fare.distance_km ?? 0;
   const timeFare = fare.time_fare ?? fare.duration_fare ?? 0;
@@ -35,7 +37,8 @@ export default function FareBreakdownPanel({ fare, couponDiscount = 0, couponCod
   if ((fare.airport_drop_charge ?? 0) > 0) items.push({ label: 'Airport Drop', amount: fare.airport_drop_charge! });
   if (fare.driver_allowance > 0) items.push({ label: 'Driver Allowance', amount: fare.driver_allowance });
   if (stateTax > 0) items.push({ label: 'State Tax', amount: stateTax });
-  if ((fare.gst_amount ?? 0) > 0) items.push({ label: `GST (${fare.gst_percentage ?? 5}%)`, amount: fare.gst_amount! });
+  const taxLabel = fare.currency === 'GBP' ? `VAT (${fare.gst_percentage ?? 20}%)` : `GST (${fare.gst_percentage ?? 5}%)`;
+  if ((fare.gst_amount ?? 0) > 0) items.push({ label: taxLabel, amount: fare.gst_amount! });
   if ((fare.insurance_fee ?? 0) > 0) items.push({ label: 'Insurance', amount: fare.insurance_fee! });
   if ((fare.platform_fee ?? 0) > 0) items.push({ label: 'Platform Fee', amount: fare.platform_fee! });
 
@@ -54,7 +57,7 @@ export default function FareBreakdownPanel({ fare, couponDiscount = 0, couponCod
         {items.map((item, i) => (
           <div key={i} className="flex justify-between text-sm">
             <span className={`text-gray-600 ${item.highlight || ''}`}>{item.label}</span>
-            <span className={`font-medium ${item.highlight || 'text-gray-800'}`}>₹{item.amount.toFixed(2)}</span>
+            <span className={`font-medium ${item.highlight || 'text-gray-800'}`}>{sym}{item.amount.toFixed(2)}</span>
           </div>
         ))}
 
@@ -62,19 +65,19 @@ export default function FareBreakdownPanel({ fare, couponDiscount = 0, couponCod
 
         <div className="flex justify-between text-sm font-medium">
           <span className="text-gray-700">Subtotal</span>
-          <span>₹{Number(subtotal).toFixed(2)}</span>
+          <span>{sym}{Number(subtotal).toFixed(2)}</span>
         </div>
 
         {effectiveCoupon > 0 && (
           <div className="flex justify-between text-sm">
             <span className="text-green-600">Coupon {effectiveCouponCode ? `(${effectiveCouponCode})` : ''}</span>
-            <span className="font-medium text-green-600">−₹{effectiveCoupon.toFixed(2)}</span>
+            <span className="font-medium text-green-600">−{sym}{effectiveCoupon.toFixed(2)}</span>
           </div>
         )}
 
         <div className="border-t border-gray-200 mt-1 pt-2 flex justify-between font-bold text-base">
           <span className="text-gray-900">Total</span>
-          <span className="text-blue-600">₹{finalFare.toFixed(2)}</span>
+          <span className="text-blue-600">{sym}{finalFare.toFixed(2)}</span>
         </div>
       </div>
     </div>

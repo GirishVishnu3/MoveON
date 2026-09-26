@@ -18,6 +18,7 @@ class FareEstimateRequest(BaseModel):
     distance_km: Optional[float] = None
     duration_min: Optional[float] = None
     is_round_trip: Optional[bool] = False
+    country_code: Optional[str] = None
 
 
 class FareEstimateResponse(FareEstimateBase):

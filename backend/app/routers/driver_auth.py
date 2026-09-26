@@ -5,7 +5,7 @@ from app.schemas.driver import (
     DriverBasicInfoRegisterSchema, DriverOtpVerifySchema, DriverLoginSchema,
     DriverResponseSchema, DriverTokenResponseSchema, DriverDraftSchema
 )
-from app.schemas.auth import OtpRequestSchema
+from app.schemas.auth import PhoneOtpRequestSchema
 from app.services.driver_service import DriverAuthService
 from app.repositories.driver import DriverRepository
 from app.authentication.router import request_otp as core_request_otp, verify_otp as core_verify_otp
@@ -27,7 +27,7 @@ async def register_driver(data: DriverBasicInfoRegisterSchema, request: Request,
     return tokens
 
 @router.post("/request-otp")
-async def request_driver_otp(data: OtpRequestSchema, db: AsyncSession = Depends(get_db)):
+async def request_driver_otp(data: PhoneOtpRequestSchema, db: AsyncSession = Depends(get_db)):
     data.role = "DRIVER"
     return await core_request_otp(data, db)
 

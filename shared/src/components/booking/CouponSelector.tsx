@@ -8,10 +8,11 @@ interface CouponSelectorProps {
   onCouponApplied: (result: CouponResult) => void;
   onCouponCleared: () => void;
   appliedCoupon: CouponResult | null;
+  currencySymbol?: string;
 }
 
 export default function CouponSelector({
-  rideType, fare, onCouponApplied, onCouponCleared, appliedCoupon,
+  rideType, fare, onCouponApplied, onCouponCleared, appliedCoupon, currencySymbol = '₹',
 }: CouponSelectorProps) {
   const [code, setCode] = useState('');
   const [loading, setLoading] = useState(false);
@@ -47,7 +48,7 @@ export default function CouponSelector({
         <div>
           <div className="text-sm font-semibold text-green-700">🎉 {appliedCoupon.code} applied</div>
           <div className="text-xs text-green-600">{appliedCoupon.description}</div>
-          <div className="text-xs font-medium text-green-700 mt-0.5">You save ₹{appliedCoupon.discount_amount?.toFixed(2)}</div>
+          <div className="text-xs font-medium text-green-700 mt-0.5">You save {currencySymbol}{appliedCoupon.discount_amount?.toFixed(2)}</div>
         </div>
         <button onClick={handleClear} className="text-sm text-red-500 hover:text-red-600 font-medium">Remove</button>
       </div>

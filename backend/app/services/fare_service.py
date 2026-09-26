@@ -6,6 +6,7 @@ Every fare is transparently calculated in 25 ordered steps.
 All calculations are logged to pricing_audit_log.
 """
 import logging
+import uuid
 from datetime import datetime
 from typing import Dict, Any, List, Optional
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -30,12 +31,14 @@ async def _load_rule_version(
     city_id: Optional[str],
     ride_type: RideType,
     vehicle_category: VehicleCategory,
+    country_code: Optional[str] = None,
 ) -> Optional[PricingRuleVersion]:
     """
     Priority resolution order:
-      1. City-specific + ride_type + vehicle_category   (is_active=True)
-      2. Global  (city_id IS NULL) + ride_type + vehicle_category
-      3. Global  + ride_type any  + vehicle_category    (broadest fallback)
+      1. City-specific + ride_type + vehicle_category (is_active=True)
+      2. If UK / GBP: UK active rule (e.g. London / GBP baseline)
+      3. Global (city_id IS NULL) + ride_type + vehicle_category
+      4. Global + ride_type any + vehicle_category (broadest fallback)
     Returns None if no rule found.
     """
     options = [
@@ -48,6 +51,11 @@ async def _load_rule_version(
 
     # 1. City-specific
     if city_id:
+        if isinstance(city_id, str):
+            try:
+                city_id = uuid.UUID(city_id)
+            except Exception:
+                pass
         r = await db.execute(
             select(PricingRuleVersion)
             .where(
@@ -64,7 +72,31 @@ async def _load_rule_version(
         if v:
             return v
 
-    # 2. Global by ride_type + vehicle
+        # If not found directly on city, check if city currency is GBP
+        city_obj = await _load_city_by_id(db, city_id)
+        if city_obj and (city_obj.currency == "GBP" or city_obj.country == "United Kingdom"):
+            country_code = "GB"
+
+    # 2. If country is UK (or GBP city), look up UK GBP active baseline rules
+    if country_code == "GB":
+        r = await db.execute(
+            select(PricingRuleVersion)
+            .join(City, PricingRuleVersion.city_id == City.id)
+            .where(
+                City.currency == "GBP",
+                PricingRuleVersion.ride_type == ride_type,
+                PricingRuleVersion.vehicle_category == vehicle_category,
+                PricingRuleVersion.is_active == True,
+            )
+            .options(*options)
+            .order_by(PricingRuleVersion.priority.desc())
+            .limit(1)
+        )
+        v = r.scalar_one_or_none()
+        if v:
+            return v
+
+    # 3. Global by ride_type + vehicle
     r = await db.execute(
         select(PricingRuleVersion)
         .where(
@@ -81,7 +113,7 @@ async def _load_rule_version(
     if v:
         return v
 
-    # 3. Broadest fallback: any active rule for this ride_type + vehicle
+    # 4. Broadest fallback: any active rule for this ride_type + vehicle
     r = await db.execute(
         select(PricingRuleVersion)
         .where(
@@ -96,7 +128,12 @@ async def _load_rule_version(
     return r.scalar_one_or_none()
 
 
-async def _load_city_by_id(db: AsyncSession, city_id: str) -> Optional[City]:
+async def _load_city_by_id(db: AsyncSession, city_id: Any) -> Optional[City]:
+    if isinstance(city_id, str):
+        try:
+            city_id = uuid.UUID(city_id)
+        except Exception:
+            pass
     r = await db.execute(select(City).where(City.id == city_id))
     return r.scalar_one_or_none()
 
@@ -172,6 +209,7 @@ class FareService:
         now: Optional[datetime] = None,
         booking_ref: Optional[str] = None,
         log_event: bool = True,
+        country_code: Optional[str] = None,
     ) -> Dict[str, Any]:
         if now is None:
             now = datetime.now()
@@ -185,7 +223,7 @@ class FareService:
             trip_days = 1.0
 
         # ── STEP 2: Load pricing rule version ─────────────────────────────
-        rule = await _load_rule_version(db, city_id, ride_type, vehicle_category)
+        rule = await _load_rule_version(db, city_id, ride_type, vehicle_category, country_code=country_code)
         if not rule:
             raise RuntimeError(
                 f"No active pricing rule for ride_type={ride_type.value}, "
@@ -198,7 +236,12 @@ class FareService:
         city = None
         if city_id:
             city = await _load_city_by_id(db, city_id)
-        currency = city.currency if city else "INR"
+        if city and city.currency:
+            currency = city.currency
+        elif country_code == "GB":
+            currency = "GBP"
+        else:
+            currency = "INR"
 
         # ── STEP 4: Effective distance ─────────────────────────────────────
         effective_distance = distance_km * 2 if is_round_trip else distance_km
@@ -454,14 +497,21 @@ class FareService:
         is_airport_pickup: bool = False,
         is_airport_drop: bool = False,
         now: Optional[datetime] = None,
+        country_code: Optional[str] = None,
     ) -> List[Dict[str, Any]]:
         """
         Returns fare estimates for all VehicleCategory values that have
         a configured and active pricing rule version. Skips categories
         with no rule configured (no error raised for them).
+        In the UK, Bike and Auto Rickshaw are omitted.
         """
         results = []
-        for category in VehicleCategory:
+        categories = list(VehicleCategory)
+        if country_code == "GB":
+            # In the UK, only two types of vehicles: 4-seater (SEDAN) and 6-seater (SUV)
+            categories = [VehicleCategory.SEDAN, VehicleCategory.SUV]
+
+        for category in categories:
             try:
                 fare = await cls.estimate_fare(
                     db=db,
@@ -475,6 +525,7 @@ class FareService:
                     is_airport_drop=is_airport_drop,
                     now=now,
                     log_event=False,  # Bulk estimate — skip individual logging
+                    country_code=country_code,
                 )
                 results.append(fare)
             except RuntimeError:
