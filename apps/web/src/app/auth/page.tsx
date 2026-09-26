@@ -28,7 +28,13 @@ function UnifiedAuthContent() {
   }, [isAuthenticated, isLoading, router, searchParams, mounted]);
 
   const handleSuccess = (_isNewUser: boolean, _role: string) => {
-    router.replace('/auth/select-role');
+    // Honor the returnUrl if one was set (e.g. user was bounced from /rider/home)
+    const returnUrl = searchParams.get('returnUrl');
+    if (returnUrl) {
+      router.replace(decodeURIComponent(returnUrl));
+    } else {
+      router.replace('/auth/select-role');
+    }
   };
 
   if (!mounted || isLoading || isAuthenticated) {

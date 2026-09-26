@@ -29,18 +29,50 @@ export default function AuthGuard({ children, allowedRole, loginPath = '/auth' }
       // Not logged in — redirect to login, preserving the page they wanted
       const returnUrl = encodeURIComponent(pathname);
       router.push(`${loginPath}?returnUrl=${returnUrl}`);
-    } else if (allowedRole && user?.role !== allowedRole) {
-      // Logged in but wrong role — clear stale tokens and send to login
-      dispatch(logout());
-      router.push(loginPath);
+      return;
+    }
+
+    if (allowedRole && user?.role) {
+      // Case-insensitive role comparison to handle both 'RIDER' and 'rider'
+      const userRole = user.role.toUpperCase();
+      const required = allowedRole.toUpperCase();
+      if (userRole !== required) {
+        // Logged in but wrong role — clear stale tokens and send to login
+        dispatch(logout());
+        router.push(loginPath);
+      }
     }
   }, [isAuthenticated, isLoading, user, router, pathname, allowedRole, loginPath, mounted, dispatch]);
 
-  // While loading or redirecting, show a spinner
-  if (!mounted || isLoading || !isAuthenticated || (allowedRole && user?.role !== allowedRole)) {
+  // Show spinner only while the auth state is still being hydrated from localStorage
+  if (!mounted || isLoading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50">
-        <svg className="animate-spin h-8 w-8 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
+  // After hydration: if not authenticated, show spinner while redirect fires
+  if (!isAuthenticated) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+          <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+          <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+        </svg>
+      </div>
+    );
+  }
+
+  // Role mismatch — show spinner while redirect fires
+  if (allowedRole && user?.role && user.role.toUpperCase() !== allowedRole.toUpperCase()) {
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-950">
+        <svg className="animate-spin h-8 w-8 text-blue-500" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
           <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
           <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
         </svg>
