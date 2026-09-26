@@ -96,6 +96,17 @@ export default function BookingStatusPage() {
 
   /* Fetch booking details */
   const fetchBookingDetails = useCallback(async () => {
+    // Demo booking: load from localStorage, no API call needed
+    if (bookingRef?.startsWith('DEMO-')) {
+      const stored = typeof window !== 'undefined' ? localStorage.getItem(`demo_booking_${bookingRef}`) : null;
+      if (stored) {
+        setBookingDetails(JSON.parse(stored));
+      } else {
+        setBookingDetails({ booking_ref: bookingRef, status: 'PENDING', ride_type: 'INTRACITY' });
+      }
+      setLoadingDetails(false);
+      return;
+    }
     try {
       const res = await apiClient.get(`/booking/${bookingRef}`);
       setBookingDetails(res.data);
@@ -121,11 +132,17 @@ export default function BookingStatusPage() {
     }
   }, [bookingRef, dispatchState.status, rdxDispatch]);
 
-  /* WebSocket connection */
+  /* WebSocket connection — skip for demo bookings */
   useEffect(() => {
     if (!bookingRef) return;
 
     rdxDispatch(startSearch(bookingRef));
+
+    // Demo bookings don't need WebSocket
+    if (bookingRef.startsWith('DEMO-')) {
+      fetchBookingDetails();
+      return;
+    }
 
     const clientId = `rider_${bookingRef}`;
     socket.connect(clientId);
