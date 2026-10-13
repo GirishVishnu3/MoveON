@@ -280,7 +280,7 @@ export default function IntercityPage() {
         const demoRef = `DEMO-${Date.now().toString(36).toUpperCase()}`;
         dispatch(setBookingConfirmed({ bookingRef: demoRef, status: 'PENDING' }));
         if (typeof window !== 'undefined') {
-          localStorage.setItem(`demo_booking_${demoRef}`, JSON.stringify({
+          const payload = {
             booking_ref: demoRef,
             status: 'PENDING',
             ride_type: 'INTERCITY',
@@ -297,7 +297,14 @@ export default function IntercityPage() {
             return_at: booking.returnAt,
             payment_method: booking.paymentMethod,
             created_at: new Date().toISOString(),
-          }));
+          };
+          localStorage.setItem(`demo_booking_${demoRef}`, JSON.stringify(payload));
+          localStorage.setItem('moveon_latest_ride_broadcast', JSON.stringify({ ...payload, timestamp: Date.now() }));
+          try {
+            const bc = new BroadcastChannel('moveon_dispatch_channel');
+            bc.postMessage({ type: 'INCOMING_RIDE', ride: payload });
+            bc.close();
+          } catch {}
         }
         router.push(`/rider/booking/${demoRef}`);
         return;

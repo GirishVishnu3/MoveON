@@ -1,5 +1,5 @@
 "use client";
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useDispatch, useSelector } from 'react-redux';
 import { RootState } from 'shared/src/store/index';
@@ -7,6 +7,7 @@ import { logout } from 'shared/src/store/authSlice';
 import { apiClient } from 'shared/src/api/axios';
 import { LocationAccessModal } from 'shared/src/components/location/LocationAccessModal';
 import { motion, AnimatePresence } from 'framer-motion';
+import { playRideAlertChime } from 'shared/src/utils/audioAlert';
 
 /* --- Icon Components --------------------------------------------- */
 const Icon = {
@@ -98,6 +99,8 @@ function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; 
     onAccept();
   };
 
+  const isUK = ride.currency === 'GBP' || (typeof window !== 'undefined' && localStorage.getItem('moveon_selected_country') === 'GB');
+  const currencySymbol = isUK ? '£' : '₹';
   const progress = (countdown / 30) * 100;
 
   return (
@@ -106,14 +109,14 @@ function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; 
       animate={{ opacity: 1, x: 0, scale: 1 }}
       exit={{ opacity: 0, x: -20, scale: 0.95 }}
       transition={{ delay: index * 0.12, duration: 0.4, ease: 'easeOut' }}
-      className="relative bg-gray-900/50 border border-gray-800/60 rounded-2xl overflow-hidden"
+      className="relative bg-gray-900/50 border border-gray-800/60 rounded-2xl overflow-hidden shadow-lg shadow-emerald-950/20"
     >
       {/* Countdown progress bar at top */}
       <motion.div
         initial={{ width: '100%' }}
         animate={{ width: `${progress}%` }}
         transition={{ duration: 0.9, ease: 'linear' }}
-        className="absolute top-0 left-0 h-0.5 bg-gradient-to-r from-emerald-500 to-blue-500"
+        className="absolute top-0 left-0 h-1 bg-gradient-to-r from-emerald-400 to-cyan-400"
       />
 
       <div className="p-4 pt-5">
@@ -122,7 +125,7 @@ function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; 
           <div className="flex-1 space-y-2 min-w-0">
             <div className="flex items-center gap-2">
               <span className="text-xs font-black text-emerald-400 bg-emerald-500/10 border border-emerald-500/20 px-2 py-0.5 rounded-lg">
-                ₹{ride.fare}
+                {currencySymbol}{ride.fare}
               </span>
               <span className="text-xs text-gray-500 font-mono">{ride.distance}</span>
               <span className="text-xs text-gray-500">•</span>
@@ -187,6 +190,9 @@ function RideCard({ ride, onAccept, index }: { ride: any; onAccept: () => void; 
 
 /* --- Active Trip Card ---------------------------------------------- */
 function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => void }) {
+  const isUK = ride.currency === 'GBP' || (typeof window !== 'undefined' && localStorage.getItem('moveon_selected_country') === 'GB');
+  const currencySymbol = isUK ? '£' : '₹';
+
   return (
     <motion.div
       initial={{ opacity: 0, scale: 0.97, y: -10 }}
@@ -217,12 +223,12 @@ function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => voi
             />
             <span className="text-xs font-black text-emerald-400 uppercase tracking-wider">Ride In Progress</span>
           </div>
-          <span className="text-xl font-black text-white">₹{ride.fare}</span>
+          <span className="text-xl font-black text-white">{currencySymbol}{ride.fare}</span>
         </div>
 
         <div className="flex items-center gap-3 mb-4">
           <div className="w-8 h-8 rounded-xl bg-white/5 border border-white/10 flex items-center justify-center text-sm font-black text-white">
-            {ride.passenger[0]}
+            {ride.passenger?.[0] || 'R'}
           </div>
           <div>
             <p className="text-sm font-bold text-white">{ride.passenger}</p>
@@ -230,7 +236,7 @@ function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => voi
           </div>
         </div>
 
-        <div className="space-y-2 mb-5">
+        <div className="space-y-2 mb-4">
           <div className="flex items-start gap-2 p-2.5 rounded-xl bg-white/3 border border-white/5">
             <span className="text-emerald-400 mt-0.5"><Icon.MapPin /></span>
             <div>
@@ -246,6 +252,16 @@ function ActiveTripCard({ ride, onComplete }: { ride: any; onComplete: () => voi
             </div>
           </div>
         </div>
+
+        {/* Live Turn-by-Turn GPS Directions */}
+        <a
+          href={`https://www.google.com/maps/dir/?api=1&destination=${encodeURIComponent(ride.pickup || ride.dropoff)}`}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="w-full mb-3 py-3 rounded-xl bg-blue-600/20 hover:bg-blue-600/30 border border-blue-500/40 text-blue-400 font-bold text-xs flex items-center justify-center gap-2 transition-all shadow-md"
+        >
+          <span>🗺️ Open Turn-by-Turn GPS Navigation</span>
+        </a>
 
         <motion.button
           whileHover={{ scale: 1.02, boxShadow: '0 0 24px rgba(16,185,129,0.4)' }}
@@ -332,6 +348,9 @@ export default function DriverDashboardPage() {
     }
   };
 
+  const scanCountRef = useRef(0);
+  const lastRideCountRef = useRef(0);
+
   useEffect(() => { loadDashboardData(); }, [user]);
 
   const fetchAvailableRides = async () => {
@@ -346,27 +365,29 @@ export default function DriverDashboardPage() {
           dropoff: r.destination_address,
           distance: `${r.distance_km} km`,
           fare: r.fare,
+          currency: r.currency || 'INR',
           passenger: r.rider_name || 'Rider Partner',
           rating: '4.9 ★',
           phone: r.rider_phone
         }));
       }
     } catch (e) {
-      // Check localStorage for demo bookings
+      // Check localStorage for demo bookings created by riders
       if (typeof window !== 'undefined') {
         for (let i = 0; i < localStorage.length; i++) {
           const key = localStorage.key(i);
           if (key && key.startsWith('demo_booking_')) {
             try {
               const b = JSON.parse(localStorage.getItem(key) || '{}');
-              if (b.status === 'PENDING' || b.status === 'DRIVER_ASSIGNED') {
+              if (b.status === 'PENDING') {
                 ridesList.push({
                   id: b.booking_ref,
                   booking_ref: b.booking_ref,
                   pickup: b.pickup_address || 'Current Location',
                   dropoff: b.destination_address || 'Destination Landmark',
-                  distance: `${b.distance_km || 5.2} km`,
-                  fare: b.fare || 180,
+                  distance: `${b.distance_km || 4.2} km`,
+                  fare: b.fare || 140,
+                  currency: b.currency || 'INR',
                   passenger: 'Local Rider',
                   rating: '4.9 ★',
                   phone: '9876543210',
@@ -377,6 +398,60 @@ export default function DriverDashboardPage() {
         }
       }
     }
+
+    // Surroundings simulation: if online and no ride requests yet, generate a realistic nearby ride in surroundings
+    if (ridesList.length === 0 && isOnline) {
+      scanCountRef.current += 1;
+      if (scanCountRef.current >= 3) {
+        scanCountRef.current = 0;
+        const isUK = typeof window !== 'undefined' && localStorage.getItem('moveon_selected_country') === 'GB';
+        const simRef = `DEMO-SRD-${Date.now().toString(36).toUpperCase()}`;
+        const simRide = isUK
+          ? {
+              id: simRef,
+              booking_ref: simRef,
+              pickup: 'Kensington High Street, London W8',
+              dropoff: 'Hyde Park Corner, London SW1X',
+              distance: '2.8 km (4 mins away)',
+              fare: 9.50,
+              currency: 'GBP',
+              passenger: 'Emma Watson',
+              rating: '4.95 ★',
+              phone: '+44 7911 123456',
+            }
+          : {
+              id: simRef,
+              booking_ref: simRef,
+              pickup: 'Indiranagar 100ft Road, Bengaluru',
+              dropoff: 'MG Road Metro Station, Bengaluru',
+              distance: '3.6 km (5 mins away)',
+              fare: 135,
+              currency: 'INR',
+              passenger: 'Kavita Sharma',
+              rating: '4.9 ★',
+              phone: '+91 98765 43210',
+            };
+        ridesList.push(simRide);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`demo_booking_${simRef}`, JSON.stringify({
+            ...simRide,
+            status: 'PENDING',
+            pickup_address: simRide.pickup,
+            destination_address: simRide.dropoff,
+            distance_km: 3.2,
+          }));
+        }
+      }
+    } else {
+      scanCountRef.current = 0;
+    }
+
+    // 🔊 Play audio chime if new rides entered surroundings
+    if (ridesList.length > lastRideCountRef.current) {
+      playRideAlertChime();
+    }
+    lastRideCountRef.current = ridesList.length;
+
     setAvailableRides(ridesList);
   };
 
@@ -387,6 +462,8 @@ export default function DriverDashboardPage() {
       timer = setInterval(fetchAvailableRides, 3000);
     } else {
       setAvailableRides([]);
+      scanCountRef.current = 0;
+      lastRideCountRef.current = 0;
     }
     return () => clearInterval(timer);
   }, [isOnline]);
@@ -395,11 +472,26 @@ export default function DriverDashboardPage() {
     const dId = driverInfo?.id || 'demo-driver-id';
     setToggling(true);
     setError(null);
+    const newStatus = !isOnline;
+
+    // Fetch live device location to broadcast surroundings
+    let lat = 12.9716;
+    let lon = 77.5946;
+    if (typeof navigator !== 'undefined' && navigator.geolocation) {
+      navigator.geolocation.getCurrentPosition((pos) => {
+        lat = pos.coords.latitude;
+        lon = pos.coords.longitude;
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('moveon_driver_coords', JSON.stringify({ lat, lon }));
+        }
+      }, () => {});
+    }
+
     try {
-      const newStatus = !isOnline;
       await apiClient.post(`/driver/${dId}/status`, {
-        is_online: newStatus, vehicle_category: driverInfo?.vehicle?.category || 'SEDAN',
-        lat: 12.9716, lon: 77.5946
+        is_online: newStatus,
+        vehicle_category: driverInfo?.vehicle?.category || 'SEDAN',
+        lat, lon
       });
       setIsOnline(newStatus);
     } catch {
@@ -411,23 +503,59 @@ export default function DriverDashboardPage() {
   };
 
   const handleAcceptRide = async (ride: any) => {
+    const bookingRef = ride.booking_ref || ride.id;
     try {
       const phone = user?.phone_number || (user as any)?.phone || (typeof window !== 'undefined' ? localStorage.getItem('moveon_user_phone') : null) || '9876543210';
       await apiClient.post('/driver/accept-ride', {
-        booking_ref: ride.booking_ref || ride.id,
+        booking_ref: bookingRef,
         phone_number: phone,
-        driver_id: driverInfo?.id
+        driver_id: driverInfo?.id || 'DEMO-DRV-1'
       });
-      setAcceptedRide(ride);
-      setAvailableRides(prev => prev.filter(r => r.id !== ride.id));
-    } catch (err: any) {
-      setAcceptedRide(ride);
-      setAvailableRides(prev => prev.filter(r => r.id !== ride.id));
+    } catch (err: any) {}
+
+    // Update locally and broadcast
+    if (typeof window !== 'undefined') {
+      const stored = localStorage.getItem(`demo_booking_${bookingRef}`);
+      if (stored) {
+        const parsed = JSON.parse(stored);
+        parsed.status = 'DRIVER_ASSIGNED';
+        parsed.driver = {
+          driver_id: driverInfo?.id || 'DEMO-DRV-1',
+          driver_name: driverName,
+          vehicle_model: `${driverInfo?.vehicle?.model || 'Sedan'} • KA 01 AB 1234`,
+          rating: 4.9,
+          eta_minutes: 3,
+        };
+        localStorage.setItem(`demo_booking_${bookingRef}`, JSON.stringify(parsed));
+      }
+      try {
+        const bc = new BroadcastChannel('moveon_dispatch_channel');
+        bc.postMessage({ type: 'DRIVER_ASSIGNED', booking_ref: bookingRef });
+        bc.close();
+      } catch {}
     }
+
+    setAcceptedRide(ride);
+    setAvailableRides(prev => prev.filter(r => r.id !== ride.id));
   };
 
   const handleCompleteTrip = () => {
-    if (acceptedRide) setTodayEarnings(e => e + acceptedRide.fare);
+    if (acceptedRide) {
+      const earned = acceptedRide.fare || 0;
+      setTodayEarnings(e => e + earned);
+      const bookingRef = acceptedRide.booking_ref || acceptedRide.id;
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem(`demo_booking_${bookingRef}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.status = 'COMPLETED';
+          localStorage.setItem(`demo_booking_${bookingRef}`, JSON.stringify(parsed));
+        }
+        // Add to wallet balance
+        const currentBal = parseFloat(localStorage.getItem('moveon_demo_wallet_balance') || '500');
+        localStorage.setItem('moveon_demo_wallet_balance', String(currentBal + earned));
+      }
+    }
     setAcceptedRide(null);
   };
 

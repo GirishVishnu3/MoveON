@@ -434,7 +434,7 @@ export default function IntracityPage() {
         dispatch(setBookingConfirmed({ bookingRef: demoRef, status: 'PENDING' }));
         // Store demo booking in localStorage so booking page can display it
         if (typeof window !== 'undefined') {
-          localStorage.setItem(`demo_booking_${demoRef}`, JSON.stringify({
+          const payload = {
             booking_ref: demoRef,
             status: 'PENDING',
             ride_type: 'INTRACITY',
@@ -446,7 +446,14 @@ export default function IntracityPage() {
             destination_address: location.destination?.address,
             distance_km: booking.selectedVehicle?.fare_breakdown?.distance_km,
             created_at: new Date().toISOString(),
-          }));
+          };
+          localStorage.setItem(`demo_booking_${demoRef}`, JSON.stringify(payload));
+          localStorage.setItem('moveon_latest_ride_broadcast', JSON.stringify({ ...payload, timestamp: Date.now() }));
+          try {
+            const bc = new BroadcastChannel('moveon_dispatch_channel');
+            bc.postMessage({ type: 'INCOMING_RIDE', ride: payload });
+            bc.close();
+          } catch {}
         }
         router.push(`/rider/booking/${demoRef}`);
         return;
