@@ -583,8 +583,6 @@ export default function DriverDashboardPage() {
 
   return (
     <div className="min-h-screen bg-[#080d17] text-gray-100 flex flex-col">
-      {/* Live Geolocation Access Prompt */}
-      <LocationAccessModal />
 
       {/* -- Sticky Header -- */}
       <motion.header

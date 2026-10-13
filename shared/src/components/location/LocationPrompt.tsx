@@ -1,45 +1,70 @@
 "use client";
 import React, { useEffect, useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useSelector } from 'react-redux';
+import { RootState } from '../../store';
 
 export default function LocationPrompt() {
   const [show, setShow] = useState(false);
   const [status, setStatus] = useState<'idle' | 'requesting' | 'granted' | 'denied'>('idle');
+  const { isAuthenticated } = useSelector((s: RootState) => s.auth);
 
   useEffect(() => {
-    // Check if the browser supports the Permissions API
+    // Only prompt ONCE after user is logged into the application
+    if (!isAuthenticated) return;
+    if (typeof window === 'undefined') return;
+
+    const alreadyCompleted = localStorage.getItem('moveon_location_prompt_completed');
+    if (alreadyCompleted === 'true') {
+      return;
+    }
+
     if (!navigator.geolocation) return;
 
     if (navigator.permissions) {
       navigator.permissions.query({ name: 'geolocation' }).then((result) => {
         if (result.state === 'prompt') {
-          // Permission hasn't been asked yet — show our custom prompt
           setShow(true);
+        } else {
+          // If browser already granted or denied permission, remember so it never shows again
+          localStorage.setItem('moveon_location_prompt_completed', 'true');
         }
-        // If already granted or denied, do nothing
+      }).catch(() => {
+        setShow(true);
       });
     } else {
-      // Fallback: if Permissions API isn't available, try to detect via a quick position request
       setShow(true);
     }
-  }, []);
+  }, [isAuthenticated]);
 
   const handleAllow = () => {
     setStatus('requesting');
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('moveon_location_prompt_completed', 'true');
+    }
     navigator.geolocation.getCurrentPosition(
-      () => {
+      (pos) => {
         setStatus('granted');
-        setTimeout(() => setShow(false), 1200);
+        if (typeof window !== 'undefined') {
+          localStorage.setItem('moveon_driver_coords', JSON.stringify({
+            lat: pos.coords.latitude,
+            lon: pos.coords.longitude
+          }));
+        }
+        setTimeout(() => setShow(false), 900);
       },
       () => {
         setStatus('denied');
-        setTimeout(() => setShow(false), 2500);
+        setTimeout(() => setShow(false), 1200);
       },
-      { enableHighAccuracy: true, timeout: 10000 }
+      { enableHighAccuracy: true, timeout: 8000 }
     );
   };
 
   const handleDismiss = () => {
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('moveon_location_prompt_completed', 'true');
+    }
     setShow(false);
   };
 

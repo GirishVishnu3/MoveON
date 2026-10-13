@@ -16,16 +16,8 @@ export function LocationAccessModal({ onLocationFetched, forceShow = false }: Lo
   const [statusMessage, setStatusMessage] = useState('');
 
   useEffect(() => {
-    // Check if location prompt has already been asked in this session
-    if (typeof window !== 'undefined') {
-      const askedInSession = sessionStorage.getItem('moveon_location_asked');
-      if (!askedInSession || forceShow) {
-        // Show prompt after a short delay for smooth entrance
-        const timer = setTimeout(() => {
-          setIsOpen(true);
-        }, 500);
-        return () => clearTimeout(timer);
-      }
+    if (forceShow) {
+      setIsOpen(true);
     }
   }, [forceShow]);
 

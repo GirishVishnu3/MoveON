@@ -52,8 +52,6 @@ export default function RiderHomePage() {
 
   return (
     <div className="min-h-screen bg-[#060b14] text-white flex flex-col relative overflow-hidden">
-      {/* Live Location Accessibility Modal */}
-      <LocationAccessModal />
 
       {/* Background Radial Glow */}
       <div className="absolute top-[-10%] left-[-10%] w-[500px] h-[500px] bg-blue-600/15 rounded-full blur-[130px] pointer-events-none" />
