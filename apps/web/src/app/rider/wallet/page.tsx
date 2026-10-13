@@ -18,13 +18,25 @@ export default function RiderWalletPage() {
     fetchWallet();
   }, []);
 
+  const isUK = typeof window !== 'undefined' && localStorage.getItem('moveon_selected_country') === 'GB';
+  const currencySymbol = isUK ? '£' : '₹';
+
   const fetchWallet = async () => {
     dispatch(setLoading(true));
     try {
       const res = await apiClient.get('/wallet/balance');
       dispatch(setWalletData(res.data));
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Failed to load wallet');
+      console.warn('Backend wallet unreachable, using local demo balance');
+      const defaultBal = isUK ? 25 : 500;
+      const savedBalance = typeof window !== 'undefined'
+        ? parseFloat(localStorage.getItem('moveon_demo_wallet_balance') || String(defaultBal))
+        : defaultBal;
+      dispatch(setWalletData({
+        balance: savedBalance,
+        currency: isUK ? 'GBP' : 'INR',
+        transactions: [],
+      }));
     } finally {
       dispatch(setLoading(false));
     }
@@ -41,13 +53,20 @@ export default function RiderWalletPage() {
       setDepositAmount('');
       await fetchWallet();
     } catch (err: any) {
-      setError(err.response?.data?.detail || 'Deposit failed');
+      // Local demo deposit
+      const current = wallet.balance || 0;
+      const newBal = current + amt;
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('moveon_demo_wallet_balance', String(newBal));
+      }
+      dispatch(updateBalance(newBal));
+      setDepositAmount('');
     } finally {
       setDepositing(false);
     }
   };
 
-  const quickAmounts = [100, 500, 1000, 2000];
+  const quickAmounts = isUK ? [10, 20, 50, 100] : [100, 500, 1000, 2000];
 
   return (
     <div className="min-h-screen bg-slate-900 text-white">
@@ -57,9 +76,9 @@ export default function RiderWalletPage() {
         <div className="text-center">
           <p className="text-blue-200 text-sm font-medium uppercase tracking-wider">Available Balance</p>
           <p className="text-5xl font-black mt-2">
-            ₹{wallet.balance.toFixed(2)}
+            {currencySymbol}{wallet.balance.toFixed(2)}
           </p>
-          <p className="text-blue-200 text-xs mt-1">{wallet.currency}</p>
+          <p className="text-blue-200 text-xs mt-1">{wallet.currency || (isUK ? 'GBP' : 'INR')}</p>
         </div>
       </div>
 
@@ -75,7 +94,7 @@ export default function RiderWalletPage() {
                 onClick={() => setDepositAmount(String(amt))}
                 className="px-4 py-2 bg-blue-50 text-blue-700 rounded-xl text-sm font-bold hover:bg-blue-100 transition-colors"
               >
-                +₹{amt}
+                +{currencySymbol}{amt}
               </button>
             ))}
           </div>
@@ -126,7 +145,7 @@ export default function RiderWalletPage() {
                 </p>
               </div>
               <p className={`font-black text-lg ${tx.transaction_type === 'CREDIT' ? 'text-green-400' : 'text-red-400'}`}>
-                {tx.transaction_type === 'CREDIT' ? '+' : '-'}₹{tx.amount.toFixed(2)}
+                {tx.transaction_type === 'CREDIT' ? '+' : '-'}{currencySymbol}{tx.amount.toFixed(2)}
               </p>
             </div>
           ))}

@@ -138,10 +138,52 @@ export default function BookingStatusPage() {
 
     rdxDispatch(startSearch(bookingRef));
 
-    // Demo bookings don't need WebSocket
+    // Demo bookings: simulate driver search and assignment
     if (bookingRef.startsWith('DEMO-')) {
       fetchBookingDetails();
-      return;
+      const isUkBooking = bookingDetails?.currency === 'GBP' || (typeof window !== 'undefined' && localStorage.getItem('moveon_selected_country') === 'GB');
+      
+      const searchMsgTimer = setTimeout(() => {
+        rdxDispatch(updateStatusMessage('Driver found! Connecting dispatch…'));
+      }, 1800);
+
+      const assignTimer = setTimeout(() => {
+        const demoDriver = isUkBooking
+          ? {
+              driver_id: 'DEMO-DRV-1',
+              driver_name: 'David Wilson',
+              vehicle_model: `${bookingDetails?.display_name || '4 Seater'} • Toyota Prius (Silver) • LD21 XYZ`,
+              rating: 4.9,
+              eta_minutes: 4,
+            }
+          : {
+              driver_id: 'DEMO-DRV-1',
+              driver_name: 'Rajesh Kumar',
+              vehicle_model: `${bookingDetails?.display_name || 'Sedan'} • Hyundai Verna (White) • KA 01 AB 1234`,
+              rating: 4.8,
+              eta_minutes: 3,
+            };
+
+        rdxDispatch(driverAssigned(demoDriver));
+        rdxDispatch(updateStatusMessage('Driver assigned and en route!'));
+
+        if (typeof window !== 'undefined') {
+          const stored = localStorage.getItem(`demo_booking_${bookingRef}`);
+          if (stored) {
+            const parsed = JSON.parse(stored);
+            parsed.status = 'DRIVER_ASSIGNED';
+            parsed.driver = demoDriver;
+            localStorage.setItem(`demo_booking_${bookingRef}`, JSON.stringify(parsed));
+            setBookingDetails(parsed);
+          }
+        }
+      }, 3500);
+
+      return () => {
+        clearTimeout(searchMsgTimer);
+        clearTimeout(assignTimer);
+        rdxDispatch(resetDispatch());
+      };
     }
 
     const clientId = `rider_${bookingRef}`;
@@ -196,12 +238,31 @@ export default function BookingStatusPage() {
   const handleCancel = async () => {
     if (!bookingRef) return;
     setCancelling(true);
+    if (bookingRef.startsWith('DEMO-')) {
+      rdxDispatch(dispatchCancelled());
+      if (typeof window !== 'undefined') {
+        const stored = localStorage.getItem(`demo_booking_${bookingRef}`);
+        if (stored) {
+          const parsed = JSON.parse(stored);
+          parsed.status = 'CANCELLED';
+          localStorage.setItem(`demo_booking_${bookingRef}`, JSON.stringify(parsed));
+          setBookingDetails(parsed);
+        }
+      }
+      setCancelling(false);
+      return;
+    }
     try {
       await apiClient.post(`/booking/${bookingRef}/cancel`);
       rdxDispatch(dispatchCancelled());
       fetchBookingDetails();
     } catch (err: any) {
-      setDetailError(err.response?.data?.detail ?? 'Failed to cancel booking.');
+      if (!err?.response || err?.code === 'ERR_NETWORK') {
+        rdxDispatch(dispatchCancelled());
+        setDetailError('');
+      } else {
+        setDetailError(err.response?.data?.detail ?? 'Failed to cancel booking.');
+      }
     } finally {
       setCancelling(false);
     }

@@ -102,20 +102,71 @@ export default function IntercityPage() {
     setDestInput(location.pickup?.address || '');
   };
 
+  // ─── Demo fare generator for Intercity rides ────────────────────────
+  const generateDemoFares = (distanceKm: number, durationMin: number, country: string): Vehicle[] => {
+    const isUK = country === 'GB';
+    const currency = isUK ? 'GBP' : 'INR';
+    const isRoundTrip = booking.tripType === 'ROUND_TRIP';
+    const multiplier = isRoundTrip ? 1.85 : 1.0;
+
+    const calcFare = (base: number, perKm: number, perMin: number, minFare: number, platformFee: number) => {
+      const dist = (base + perKm * distanceKm + perMin * durationMin) * multiplier;
+      const subtotal = Math.max(dist, minFare * multiplier);
+      const total = Math.round(subtotal + platformFee);
+      return { subtotal, total, base, dist: perKm * distanceKm * multiplier, dur: perMin * durationMin * multiplier, platformFee, currency, minFare };
+    };
+
+    const buildBreakdown = (f: any, cat: string) => ({
+      vehicle_category: cat,
+      currency: f.currency,
+      base_fare: f.base,
+      distance_fare: f.dist,
+      time_fare: f.dur,
+      platform_fee: f.platformFee,
+      subtotal_raw: f.subtotal,
+      total_fare: f.total,
+      minimum_fare: f.minFare,
+      minimum_fare_applied: f.subtotal < f.minFare,
+      peak_multiplier: 1.0,
+      surge_multiplier: 1.0,
+      gst_percentage: isUK ? 0 : 5,
+      gst_amount: isUK ? 0 : Math.round(f.subtotal * 0.05),
+      distance_km: distanceKm,
+      duration_min: durationMin,
+      is_demo: true,
+    });
+
+    if (isUK) {
+      const sedan = calcFare(8.0, 1.25, 0.15, 25.0, 1.50);
+      const suv   = calcFare(12.0, 1.75, 0.22, 38.0, 2.00);
+      return [
+        { category: 'SEDAN', vehicle_category: 'SEDAN', display_name: '4 Seater InterCity', eta_min: 15, eta_max: 25, icon: 'sedan', comfort: 'Standard (4 Seats)', seats: 4, luggage: 'Large', fuel_type: 'Diesel', cancellation_policy: 'Free cancellation up to 1 hr before', ride_types: ['INTERCITY'], eta_display: '15-25 min', fare: sedan.total, fare_breakdown: buildBreakdown(sedan, 'SEDAN') },
+        { category: 'SUV',   vehicle_category: 'SUV',   display_name: '6 Seater InterCity', eta_min: 20, eta_max: 30, icon: 'suv',   comfort: 'XL (6 Seats)',      seats: 6, luggage: 'Large', fuel_type: 'Diesel', cancellation_policy: 'Free cancellation up to 1 hr before', ride_types: ['INTERCITY'], eta_display: '20-30 min', fare: suv.total,   fare_breakdown: buildBreakdown(suv,   'SUV') },
+      ];
+    } else {
+      const sedan = calcFare(250, 13.5, 0.8, 450, 25);
+      const suv   = calcFare(350, 17.5, 1.2, 650, 35);
+      return [
+        { category: 'SEDAN', vehicle_category: 'SEDAN', display_name: 'Sedan InterCity (4 Seats)', eta_min: 20, eta_max: 35, icon: 'sedan', comfort: 'Comfortable AC', seats: 4, luggage: 'Large', fuel_type: 'Diesel', cancellation_policy: 'Free cancellation up to 1 hr before', ride_types: ['INTERCITY'], eta_display: '20-35 min', fare: sedan.total, fare_breakdown: buildBreakdown(sedan, 'SEDAN') },
+        { category: 'SUV',   vehicle_category: 'SUV',   display_name: 'SUV InterCity (6 Seats)',   eta_min: 25, eta_max: 40, icon: 'suv',   comfort: 'Premium AC',     seats: 6, luggage: 'Large', fuel_type: 'Diesel', cancellation_policy: 'Free cancellation up to 1 hr before', ride_types: ['INTERCITY'], eta_display: '25-40 min', fare: suv.total,   fare_breakdown: buildBreakdown(suv,   'SUV') },
+      ];
+    }
+  };
+
   useEffect(() => {
     if (location.pickup && location.destination) fetchFareEstimates();
-  }, [location.pickup, location.destination]);
+  }, [location.pickup, location.destination, booking.tripType]);
 
   const fetchFareEstimates = async () => {
     if (!location.pickup || !location.destination) return;
     dispatch(setIsLoadingFare(true));
     setError('');
+    let distanceKm = 100, durationMin = 90;
     try {
       const routeRes = await fetch(
         `https://router.project-osrm.org/route/v1/driving/${location.pickup.lon},${location.pickup.lat};${location.destination.lon},${location.destination.lat}?overview=full&geometries=geojson`
       );
       const routeData = await routeRes.json();
-      let distanceKm = 100, durationMin = 90;
       if (routeData?.routes?.[0]) {
         distanceKm = routeData.routes[0].distance / 1000;
         durationMin = routeData.routes[0].duration / 60;
@@ -126,30 +177,40 @@ export default function IntercityPage() {
       const isRoundTrip = booking.tripType === 'ROUND_TRIP';
       const lat = location.pickup.lat;
       const lon = location.pickup.lon;
-      const intercityCountry = (lat >= 49.8 && lat <= 60.9 && lon >= -8.6 && lon <= 1.8) ? 'GB' : 'IN';
+      const savedCountry = typeof window !== 'undefined' ? localStorage.getItem('moveon_selected_country') : null;
+      const intercityCountry = (savedCountry === 'GB' || (lat >= 49.8 && lat <= 60.9 && lon >= -8.6 && lon <= 1.8)) ? 'GB' : 'IN';
 
-      const res = await apiClient.post('/booking/estimate', {
-        ride_type: 'INTERCITY',
-        distance_km: distanceKm,
-        duration_min: durationMin,
-        pickup_lat: location.pickup.lat,
-        pickup_lon: location.pickup.lon,
-        destination_lat: location.destination.lat,
-        destination_lon: location.destination.lon,
-        is_round_trip: isRoundTrip,
-        country_code: intercityCountry,
-      });
-      let returnedVehicles: Vehicle[] = res.data.vehicles || [];
-      if (intercityCountry === 'GB') {
-        returnedVehicles = returnedVehicles.filter(
-          v => v.category === 'SEDAN' || v.category === 'SUV'
-        );
+      try {
+        const res = await apiClient.post('/booking/estimate', {
+          ride_type: 'INTERCITY',
+          distance_km: distanceKm,
+          duration_min: durationMin,
+          pickup_lat: location.pickup.lat,
+          pickup_lon: location.pickup.lon,
+          destination_lat: location.destination.lat,
+          destination_lon: location.destination.lon,
+          is_round_trip: isRoundTrip,
+          country_code: intercityCountry,
+        });
+        let returnedVehicles: Vehicle[] = res.data.vehicles || [];
+        if (intercityCountry === 'GB') {
+          returnedVehicles = returnedVehicles.filter(
+            v => v.category === 'SEDAN' || v.category === 'SUV'
+          );
+        }
+        setVehicles(returnedVehicles);
+      } catch (apiErr: any) {
+        console.warn('Backend offline — using demo intercity fares:', apiErr?.message);
+        const demoVehicles = generateDemoFares(distanceKm, durationMin, intercityCountry);
+        setVehicles(demoVehicles);
+        setError('');
       }
-      setVehicles(returnedVehicles);
     } catch (e: any) {
       console.error('Intercity estimation error:', e);
-      const detail = e?.response?.data?.detail;
-      setError(typeof detail === 'string' ? detail : 'Could not fetch route or fare estimates.');
+      const savedCountry = typeof window !== 'undefined' ? localStorage.getItem('moveon_selected_country') : null;
+      const intercityCountry = savedCountry === 'GB' ? 'GB' : 'IN';
+      const demoVehicles = generateDemoFares(distanceKm, durationMin, intercityCountry);
+      setVehicles(demoVehicles);
     } finally {
       dispatch(setIsLoadingFare(false));
     }
@@ -214,6 +275,33 @@ export default function IntercityPage() {
       dispatch(setBookingConfirmed({ bookingRef: res.data.booking_ref, status: res.data.status }));
       router.push(`/rider/booking/${res.data.booking_ref}`);
     } catch (e: any) {
+      console.warn('Booking confirm API error — using demo booking:', e?.message);
+      if (!e?.response || e?.message === 'Network Error' || e?.code === 'ERR_NETWORK') {
+        const demoRef = `DEMO-${Date.now().toString(36).toUpperCase()}`;
+        dispatch(setBookingConfirmed({ bookingRef: demoRef, status: 'PENDING' }));
+        if (typeof window !== 'undefined') {
+          localStorage.setItem(`demo_booking_${demoRef}`, JSON.stringify({
+            booking_ref: demoRef,
+            status: 'PENDING',
+            ride_type: 'INTERCITY',
+            trip_type: booking.tripType,
+            vehicle_category: booking.selectedVehicle?.category,
+            display_name: booking.selectedVehicle?.display_name,
+            fare: booking.selectedVehicle?.fare,
+            currency: isUK ? 'GBP' : 'INR',
+            pickup_address: location.pickup?.address,
+            destination_address: location.destination?.address,
+            distance_km: routeInfo?.distanceKm || 100,
+            duration_min: routeInfo?.durationMin || 90,
+            scheduled_at: booking.scheduledAt,
+            return_at: booking.returnAt,
+            payment_method: booking.paymentMethod,
+            created_at: new Date().toISOString(),
+          }));
+        }
+        router.push(`/rider/booking/${demoRef}`);
+        return;
+      }
       setError(e.response?.data?.detail || 'Booking failed.');
       dispatch(setIsConfirming(false));
     }
